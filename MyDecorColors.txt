@@ -1,0 +1,305 @@
+This is an important decision because color communicates what the app is before the user reads a single word.
+
+For your audience, I wouldn't choose colors based on current design trends. I'd choose them based on three questions:
+
+1. **Who are the users?**
+
+   * Wedding vendors.
+   * They use the app for work, not entertainment.
+   * Many may not be very tech-savvy.
+
+2. **What emotion should the app create?**
+
+   * Trust.
+   * Organization.
+   * Calmness.
+   * Reliability.
+   * Simplicity.
+
+3. **Where is the app used?**
+
+   * Busy market.
+   * Outdoors in daylight.
+   * Fast-paced customer interactions.
+
+That means colors need good contrast and readability.
+
+---
+
+# I would avoid
+
+## ❌ Purple
+
+Looks creative and premium, but not very "business."
+
+---
+
+## ❌ Bright red
+
+Feels like errors or danger.
+
+Good for overdue bookings or delete buttons.
+
+---
+
+## ❌ Bright orange
+
+Can feel noisy, especially after using the app all day.
+
+---
+
+## ❌ Pure black theme
+
+Most vendors use phones outdoors.
+
+Dark mode reduces visibility in bright sunlight.
+
+Light theme should be the default.
+
+---
+
+# Colors I think fit best
+
+## Option 1 — Blue (My recommendation)
+
+Think of banking apps.
+
+Blue communicates:
+
+* Trust
+* Reliability
+* Organization
+* Professionalism
+
+Exactly what you're trying to replace—a notebook—with.
+
+Example palette:
+
+Primary
+
+```
+#2563EB
+```
+
+Primary dark
+
+```
+#1D4ED8
+```
+
+Light blue
+
+```
+#DBEAFE
+```
+
+Background
+
+```
+#F8FAFC
+```
+
+Cards
+
+```
+#FFFFFF
+```
+
+Text
+
+```
+#111827
+```
+
+Success
+
+```
+#16A34A
+```
+
+Warning
+
+```
+#F59E0B
+```
+
+Error
+
+```
+#DC2626
+```
+
+This would look modern without intimidating users.
+
+---
+
+# Option 2 — Emerald Green
+
+Green can also work because it suggests:
+
+* Money
+* Business
+* Growth
+* Success
+
+It may even resonate with vendors because every booking is revenue.
+
+Primary
+
+```
+#059669
+```
+
+Light
+
+```
+#D1FAE5
+```
+
+Background
+
+```
+#F9FAFB
+```
+
+Very clean.
+
+---
+
+# Option 3 — Deep Teal ⭐
+
+This is actually my favorite.
+
+It combines blue's trust with green's warmth.
+
+Primary
+
+```
+#0F766E
+```
+
+Light
+
+```
+#CCFBF1
+```
+
+Background
+
+```
+#F8FAFC
+```
+
+Cards
+
+```
+#FFFFFF
+```
+
+Text
+
+```
+#1F2937
+```
+
+It feels calm and professional without looking like a finance app.
+
+---
+
+# Accent colors
+
+Use color only where it adds meaning.
+
+Status colors:
+
+Reserved
+
+```
+Blue
+```
+
+Picked up
+
+```
+Orange
+```
+
+Returned
+
+```
+Green
+```
+
+Cancelled
+
+```
+Red
+```
+
+This lets users understand a booking's state instantly.
+
+---
+
+# Typography
+
+Don't rely on color alone.
+
+Every booking card should be readable even in grayscale.
+
+Good spacing is more important than colorful UI.
+
+---
+
+# Buttons
+
+Keep one primary action.
+
+Example:
+
+```
++ New Booking
+```
+
+Blue button.
+
+Everything else should be neutral.
+
+---
+
+# Why not wedding colors?
+
+Many wedding apps use:
+
+* Gold
+* Pink
+* Rose
+* Beige
+
+They look elegant.
+
+But your users are **running a business**, not planning their own wedding.
+
+Imagine your mother opens the app 80 times a day.
+
+A soft pink luxury theme may look beautiful the first time but quickly becomes distracting. A clean business interface will likely age better.
+
+---
+
+# My final recommendation
+
+I'd use a palette centered on **deep teal**, because it balances professionalism with approachability:
+
+| Element         | Color     |
+| --------------- | --------- |
+| Primary         | `#0F766E` |
+| Primary pressed | `#115E59` |
+| Background      | `#F8FAFC` |
+| Surface/Card    | `#FFFFFF` |
+| Text            | `#111827` |
+| Secondary text  | `#6B7280` |
+| Border          | `#E5E7EB` |
+| Success         | `#16A34A` |
+| Warning         | `#F59E0B` |
+| Error           | `#DC2626` |
+
+This palette is simple, works well in bright environments, feels trustworthy, and doesn't compete with the colorful wedding attire that vendors are already looking at during their day. It also leaves room for photos of gowns and suits to stand out, rather than the interface itself becoming the focus.
