@@ -1,120 +1,305 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Animated } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  
+} from "react-native";
+import { StatusBar } from 'expo-status-bar';
+import ImageViewing from "react-native-image-viewing";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from '@react-navigation/native';
 
-const MOCK_BOOKINGS = [
+const BOOKINGS = [
   {
-    id: 'b1',
-    dress: 'Asteria Gown',
-    date: '2025-06-12',
-    customer: 'Marie Uwase',
+    id: "1",
+    customer: "Diane Uwase",
+    weddingDate: "15 Aug 2026",
+    stage: "Completed",
+    images: [
+      "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800",
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800",
+      "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800",
+    ],
   },
   {
-    id: 'b2',
-    dress: 'Nebula Dress',
-    date: '2025-07-03',
-    customer: 'Grace Ndayishimiye',
+    id: "2",
+    customer: "Alice Mukamana",
+    weddingDate: "22 Aug 2026",
+    stage: "Reserved",
+    images: [
+      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800",
+      "https://images.unsplash.com/photo-1521119989659-a83eee488004?w=800",
+      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800",
+    ],
+  },
+  {
+    id: "3",
+    customer: "Diane Uwase",
+    weddingDate: "15 Aug 2026",
+    stage: "Completed",
+    images: [
+      "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800",
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800",
+      "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800",
+    ],
+  },
+  {
+    id: "4",
+    customer: "Alice Mukamana",
+    weddingDate: "22 Aug 2026",
+    stage: "Reserved",
+    images: [
+      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800",
+      "https://images.unsplash.com/photo-1521119989659-a83eee488004?w=800",
+      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800",
+    ],
+  },
+  {
+    id: "5",
+    customer: "Diane Uwase",
+    weddingDate: "15 Aug 2026",
+    stage: "Completed",
+    images: [
+      "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800",
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800",
+      "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800",
+    ],
+  },
+  {
+    id: "6",
+    customer: "Alice Mukamana",
+    weddingDate: "22 Aug 2026",
+    stage: "Reserved",
+    images: [
+      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800",
+      "https://images.unsplash.com/photo-1521119989659-a83eee488004?w=800",
+      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800",
+    ],
   },
 ];
 
-const BookingCard = ({ item, index }) => {
-  const translateY = useRef(new Animated.Value(30)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        delay: index * 100,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        delay: index * 100,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [translateY, opacity, index]);
-
-  return (
-    <Animated.View style={{ transform: [{ translateY }], opacity }}>
-      <View style={bStyles.bookingCard}>
-        <Ionicons name="calendar" size={24} color="#6200ee" />
-        <View style={{ marginLeft: 12 }}>
-          <Text style={bStyles.dressName}>{item.dress}</Text>
-          <Text style={bStyles.meta}>{`Date: ${item.date}`}</Text>
-          <Text style={bStyles.meta}>{`Client: ${item.customer}`}</Text>
-        </View>
-      </View>
-    </Animated.View>
-  );
-};
-
 export default function BookingsScreen() {
-  const renderItem = ({ item, index }) => <BookingCard item={item} index={index} />;
+  const navigation = useNavigation();
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerImages, setViewerImages] = useState([]);
+  const [imageIndex, setImageIndex] = useState(0);
+
+  const openViewer = (images, index) => {
+    setViewerImages(images.map((img) => ({ uri: img })));
+    setImageIndex(index);
+    setViewerVisible(true);
+  };
+
+  const renderImages = (images) => (
+    <View style={styles.imageStack}>
+      {images.slice(0, 3).map((img, index) => (
+        <TouchableOpacity
+          key={index}
+          activeOpacity={0.9}
+          onPress={() => openViewer(images, index)}
+          style={[
+            styles.imageWrapper,
+            {
+              left: index * 22,
+              transform: [
+                {
+                  rotate:
+                    index === 0
+                      ? "-10deg"
+                      : index === 1
+                      ? "0deg"
+                      : "10deg",
+                },
+              ],
+              zIndex: index,
+            },
+          ]}
+        >
+          <Image source={{ uri: img }} style={styles.image} />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      activeOpacity={0.2}
+      style={styles.card}
+      onPress={() => console.log("Navigate to Booking Details")}
+    >
+      {renderImages(item.images)}
+
+      <View style={styles.info}>
+        <View style={styles.topRow}>
+          <Text style={styles.name}>{item.customer}</Text>
+
+          {item.stage === "Completed" ? (
+            <Ionicons
+              name="checkmark-circle"
+              color="#16A34A"
+              size={22}
+            />
+          ) : (
+            <Ionicons
+              name="time"
+              color="#F59E0B"
+              size={22}
+            />
+          )}
+        </View>
+
+        <Text style={styles.date}>
+          Wedding • {item.weddingDate}
+        </Text>
+
+        <Text style={styles.stage}>
+          {item.stage}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <View style={bStyles.container}>
-      {MOCK_BOOKINGS.length === 0 ? (
-        <View style={bStyles.emptyState}>
-          <Ionicons name="archive-outline" size={56} color="#444" />
-          <Text style={bStyles.emptyText}>No bookings yet</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={MOCK_BOOKINGS}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingVertical: 24 }}
-          showsVerticalScrollIndicator={false}
+    <SafeAreaView style={styles.container}>
+
+      <Text style={styles.title}>Bookings</Text>
+
+      <FlatList
+        data={BOOKINGS}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={{ padding: 20, paddingBottom: 10 }}
+      />
+
+      <TouchableOpacity
+        style={styles.fab}
+        activeOpacity={0.85}
+      onPress={()=>{navigation.navigate('NewBooking');}}>
+        <Ionicons
+          name="add"
+          size={32}
+          color="white"
         />
-      )}
-    </View>
+      </TouchableOpacity>
+
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={imageIndex}
+        visible={viewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+      />
+
+    </SafeAreaView>
   );
 }
 
-const bStyles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0e0e0e',
-    paddingHorizontal: 16,
+    backgroundColor: "#F8FAFC",
   },
-  bookingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1c1c1c',
-    padding: 16,
-    borderRadius: 20,
-    marginBottom: 16,
-    shadowColor: '#fff',
+
+  title: {
+    fontSize: 30,
+    fontWeight: "700",
+    color: "#111827",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+
+    shadowColor: "#000",
     shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    elevation: 3,
   },
-  dressName: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+
+  imageStack: {
+    width: 110,
+    height: 90,
+    position: "relative",
   },
-  meta: {
-    color: '#9e9e9e',
-    marginTop: 2,
+
+  imageWrapper: {
+    position: "absolute",
+    top: 8,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#FFF",
   },
-  emptyState: {
+
+  image: {
+    width: 60,
+    height: 75,
+  },
+
+  info: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginLeft: 18,
   },
-  emptyText: {
-    color: '#666',
-    marginTop: 12,
+
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  name: {
+    fontWeight: "700",
+    fontSize: 18,
+    color: "#111827",
+  },
+
+  date: {
+    marginTop: 6,
+    color: "#6B7280",
+    fontSize: 14,
+  },
+
+  stage: {
+    marginTop: 8,
+    fontWeight: "600",
+    color: "#0F766E",
+  },
+
+  fab: {
+    position: "absolute",
+    right: 28,
+    bottom: 70,
+
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+
+    backgroundColor: "#0F766E",
+
+    justifyContent: "center",
+    alignItems: "center",
+
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    elevation: 6,
   },
 });
-
-// ─────────────────────────────────────────────────────────────
-// Notes:
-// - Hooks (useRef/useEffect) are now only called inside functional components (StockCard & BookingCard), eliminating the "Invalid hook call" warning.
-// - Each list item animates independently without violating React's rules of hooks.
-// - Remove the previous duplicate default export if your bundler complains; this file now exports default components per screen only.

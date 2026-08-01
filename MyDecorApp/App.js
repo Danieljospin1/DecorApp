@@ -1,16 +1,19 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
-import BottomTabs from './components/bottomTabs'
+import NewBookingScreen from './Screens/newBooking';
 import BookingsScreen from './Screens/bookings';
-import StockScreen from './Screens/stock';
+import BookingsStack from './components/stackNav';
+import { NavigationContainer } from "@react-navigation/native";
+
 import {MotiProvider} from 'moti'
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <BottomTabs/>
-      <StatusBar style="auto" backgroundColor='black'/>
-    </View>
+    <NavigationContainer style={styles.container}>
+      <StatusBar style="auto" backgroundColor='transparent'/>
+      <BookingsStack/>
+      
+    </NavigationContainer>
   );
 }
 
