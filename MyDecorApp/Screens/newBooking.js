@@ -37,7 +37,7 @@ const makeItem = () => ({
 
 
 const CLOTH_CONFIG = {
-    gown: { label: "Ikanzu y' abageni ", hasColor: false, hasSize: false, sizeType: null },
+    gown: { label: "Ikanzu y' abageni", hasColor: false, hasSize: false, sizeType: null },
     ikoti: { label: "Ikoti", hasColor: true, hasSize: true, sizeType: "number" },
     umukenyero: { label: "Umukenyero", hasColor: false, hasSize: false, sizeType: null },
     malene: { label: "Malene", hasColor: false, hasSize: false, sizeType: null },
@@ -190,7 +190,7 @@ function useContactPicker(setClientName, setPhone) {
                 animationType="slide"
                 onRequestClose={closeContactSheet}
             >
-                <View style={{flex: 1,backgroundColor: "rgba(0,0,0,0.45)",justifyContent: "flex-end",}}>
+                <View style={contactStyles.backdrop}>
                     {/* Tap backdrop to close */}
                     <TouchableOpacity
                         style={{ flex: 1 }}
@@ -198,7 +198,7 @@ function useContactPicker(setClientName, setPhone) {
                         onPress={closeContactSheet}
                     />
 
-                    <View style={{backgroundColor: C.card,borderTopLeftRadius: 24,borderTopRightRadius: 24,paddingHorizontal: 20,paddingTop: 14,maxHeight: "85%",gap: 12}}>
+                    <View style={contactStyles.sheet}>
                         <View style={contactStyles.sheetHandle} />
 
                         {/* Header */}
@@ -351,8 +351,20 @@ function useContactPicker(setClientName, setPhone) {
 // ─── Contact Styles ───────────────────────────────────────────────────────────
 const contactStyles = StyleSheet.create({
 
-
-    
+    backdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        justifyContent: "flex-end",
+    },
+    sheet: {
+        backgroundColor: C.card,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingTop: 14,
+        maxHeight: "85%",
+        gap: 12,
+    },
     sheetHandle: {
         width: 40,
         height: 4,
@@ -1255,7 +1267,6 @@ export default function NewBookingScreen() {
                     mode="date"
                     display="default"
                     minimumDate={activePicker === "return" ? bookingDate : new Date()}
-                    
                     onChange={(event, selectedDate) => {
                         setActivePicker(null); // always close after selection or dismiss
 
@@ -1624,7 +1635,6 @@ const styles = StyleSheet.create({
     chipActive: {
         borderColor: C.primary,
         backgroundColor: C.primary,
-        
     },
     chipText: {
         fontSize: 13,

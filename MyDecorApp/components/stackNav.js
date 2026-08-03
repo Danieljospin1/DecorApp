@@ -17,6 +17,7 @@ export default function BookingsStack() {
         name="Bookings"
         component={BookingsScreen}
         
+        
       />
 
       <Stack.Screen
