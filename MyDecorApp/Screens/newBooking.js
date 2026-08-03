@@ -1,18 +1,10 @@
-import React, { useState, useCallback } from "react";
-import {
-    View,
-    Text,
-    ScrollView,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
-    StatusBar,
-    Image,
-    Platform,
-    KeyboardAvoidingView,
-} from "react-native";
+import React, { useState, useCallback, useMemo } from "react";
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, StatusBar, Image, Platform, KeyboardAvoidingView, Modal, ActivityIndicator, FlatList } from "react-native";
 import Ionicons from '@expo/vector-icons/Ionicons';
-
+import { MultiSelect } from "react-native-element-dropdown";
+import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Contacts from 'expo-contacts';
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
     primary: "#0F766E",
@@ -43,23 +35,35 @@ const makeItem = () => ({
     photos: [null, null, null],
 });
 
-const CLOTH_TYPES = [
-    "Princess Gown",
-    "Black Suit",
-    "Imikenyero",
-    "Bridesmaid Dress",
-    "Shoes",
-    "Accessories",
-];
-const COLORS = ["White", "Black", "Blue", "Gold", "Red"];
+
+const CLOTH_CONFIG = {
+    gown: { label: "Ikanzu y' abageni ", hasColor: false, hasSize: false, sizeType: null },
+    ikoti: { label: "Ikoti", hasColor: true, hasSize: true, sizeType: "number" },
+    umukenyero: { label: "Umukenyero", hasColor: false, hasSize: false, sizeType: null },
+    malene: { label: "Malene", hasColor: false, hasSize: false, sizeType: null },
+    top: { label: "Top", hasColor: true, hasSize: false, sizeType: null },
+    ishati: { label: "Ishati", hasColor: true, hasSize: true, sizeType: "letter" },
+};
+const CLOTH_TYPES = Object.entries(CLOTH_CONFIG).map(([id, c]) => ({
+    value: id,
+    label: c.label,
+}));
+const SIZE_SCALES = {
+    letter: ["XS", "S", "M", "L", "XL"],
+    number: ["28", "30", "32", "34", "36", "38"],
+};
+
+const COLORS = ["White", "Black", "Blue", "blue fonce", "Gold", "Red"];
 const SIZES = ["XS", "S", "M", "L", "XL"];
 
 const COLOR_DOT = {
     White: "#FFFFFF",
     Black: "#1E293B",
     Blue: "#3B82F6",
+    bleuFonce: "#00008B",
     Gold: "#F59E0B",
     Red: "#EF4444",
+
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -95,6 +99,411 @@ function OutlinedInput({ label, value, onChange, keyboardType = "default", place
         </View>
     );
 }
+//contacts handler
+function useContactPicker(setClientName, setPhone) {
+
+    const [sheetVisible, setSheetVisible] = useState(false);
+    const [contacts, setContacts] = useState([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [dupeModalVisible, setDupeModalVisible] = useState(false);
+    const [dupeGroup, setDupeGroup] = useState([]);
+
+    // ── Permission + load ─────────────────────────────────────────────────────
+    const openContactSheet = async () => {
+        const { status } = await Contacts.requestPermissionsAsync();
+
+        if (status !== "granted") {
+            Alert.alert(
+                "Permission needed",
+                "Please allow access to your contacts in device settings.",
+                [{ text: "OK" }]
+            );
+            return;
+        }
+
+        setLoading(true);
+        setSheetVisible(true);
+
+        const { data } = await Contacts.getContactsAsync({
+            fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
+        });
+
+        const withPhone = data
+            .filter(c => c.name && c.phoneNumbers?.length > 0)
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        setContacts(withPhone);
+        setLoading(false);
+    };
+
+    // ── Pick a single contact (final step) ───────────────────────────────────
+    const pickContact = useCallback((contact, phoneNumber) => {
+        setClientName(contact.name);
+        setPhone(phoneNumber.replace(/\s+/g, ""));
+        setSheetVisible(false);
+        setDupeModalVisible(false);
+        setSearchQuery("");
+    }, [setClientName, setPhone]);
+
+    // ── Handle tapping a contact row ─────────────────────────────────────────
+    const handleContactPress = useCallback((contact) => {
+        const numbers = contact.phoneNumbers;
+
+        if (numbers.length === 1) {
+            pickContact(contact, numbers[0].number);
+        } else {
+            setDupeGroup(
+                numbers.map(n => ({ ...contact, _resolvedNumber: n }))
+            );
+            setDupeModalVisible(true);
+        }
+    }, [pickContact]);
+
+    const closeDupeModal = useCallback(() => {
+        setDupeModalVisible(false);
+        setDupeGroup([]);
+    }, []);
+
+    const closeContactSheet = useCallback(() => {
+        setSheetVisible(false);
+        setSearchQuery("");
+    }, []);
+
+    // ── Filtered list — derived, not state ───────────────────────────────────
+    const filteredContacts = useMemo(() => {
+        if (searchQuery.trim() === "") return contacts;
+        const q = searchQuery.toLowerCase();
+        return contacts.filter(c =>
+            c.name.toLowerCase().includes(q) ||
+            c.phoneNumbers.some(n => n.number.includes(searchQuery))
+        );
+    }, [contacts, searchQuery]);
+
+    // ── Single render function — no nested component definitions ──────────────
+    const renderModals = () => (
+        <>
+            {/* ── Contact list bottom sheet ── */}
+            <Modal
+                visible={sheetVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={closeContactSheet}
+            >
+                <View style={{flex: 1,backgroundColor: "rgba(0,0,0,0.45)",justifyContent: "flex-end",}}>
+                    {/* Tap backdrop to close */}
+                    <TouchableOpacity
+                        style={{ flex: 1 }}
+                        activeOpacity={1}
+                        onPress={closeContactSheet}
+                    />
+
+                    <View style={{backgroundColor: C.card,borderTopLeftRadius: 24,borderTopRightRadius: 24,paddingHorizontal: 20,paddingTop: 14,maxHeight: "85%",gap: 12}}>
+                        <View style={contactStyles.sheetHandle} />
+
+                        {/* Header */}
+                        <View style={contactStyles.sheetHeaderRow}>
+                            <Text style={contactStyles.sheetTitle}>Contacts</Text>
+                            <TouchableOpacity
+                                onPress={closeContactSheet}
+                                style={contactStyles.closeBtn}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="close" size={20} color={C.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Search bar */}
+                        <View style={contactStyles.searchBar}>
+                            <Ionicons name="search-outline" size={17} color={C.textMuted} />
+                            <TextInput
+                                style={contactStyles.searchInput}
+                                placeholder="Search name or number..."
+                                placeholderTextColor={C.textMuted}
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                autoCorrect={false}
+                                cursorColor={C.primary}
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                                    <Ionicons name="close-circle" size={17} color={C.textMuted} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+
+                        {/* List / loading / empty */}
+                        {loading ? (
+                            <View style={contactStyles.centered}>
+                                <ActivityIndicator size="large" color={C.primary} />
+                                <Text style={contactStyles.loadingText}>Loading contacts...</Text>
+                            </View>
+                        ) : filteredContacts.length === 0 ? (
+                            <View style={contactStyles.centered}>
+                                <Ionicons name="person-outline" size={40} color={C.textMuted} />
+                                <Text style={contactStyles.emptyText}>No contacts found</Text>
+                            </View>
+                        ) : (
+                            <FlatList
+                                data={filteredContacts}
+                                keyExtractor={item => item.id}
+                                showsVerticalScrollIndicator={false}
+                                keyboardShouldPersistTaps="handled"
+                                contentContainerStyle={{ paddingBottom: 20 }}
+                                ItemSeparatorComponent={() => (
+                                    <View style={contactStyles.separator} />
+                                )}
+                                renderItem={({ item }) => {
+                                    const initial = item.name?.charAt(0).toUpperCase() ?? "?";
+                                    return (
+                                        <TouchableOpacity
+                                            style={contactStyles.contactRow}
+                                            onPress={() => handleContactPress(item)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <View style={contactStyles.avatar}>
+                                                <Text style={contactStyles.avatarText}>{initial}</Text>
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={contactStyles.contactName}>{item.name}</Text>
+                                                <Text style={contactStyles.contactNumber} numberOfLines={1}>
+                                                    {item.phoneNumbers.length > 1
+                                                        ? `${item.phoneNumbers[0].number}  +${item.phoneNumbers.length - 1} more`
+                                                        : item.phoneNumbers[0].number}
+                                                </Text>
+                                            </View>
+                                            <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
+                                        </TouchableOpacity>
+                                    );
+                                }}
+                            />
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ── Dupe number resolver — separate Modal, not nested ── */}
+            <Modal
+                visible={dupeModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeDupeModal}
+            >
+                <TouchableOpacity
+                    style={contactStyles.backdrop}
+                    activeOpacity={1}
+                    onPress={closeDupeModal}
+                >
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        style={[contactStyles.sheet, { paddingBottom: 28 }]}
+                        onPress={() => { }}
+                    >
+                        <View style={contactStyles.sheetHandle} />
+
+                        <Text style={contactStyles.sheetTitle}>
+                            {dupeGroup[0]?.name}
+                        </Text>
+                        <Text style={contactStyles.sheetSubtitle}>
+                            Multiple numbers found. Choose one:
+                        </Text>
+
+                        {dupeGroup.map((entry, i) => (
+                            <TouchableOpacity
+                                key={i}
+                                style={contactStyles.dupeRow}
+                                onPress={() => pickContact(entry, entry._resolvedNumber.number)}
+                                activeOpacity={0.75}
+                            >
+                                <View style={contactStyles.dupeIconWrap}>
+                                    <Ionicons name="call-outline" size={18} color={C.primary} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={contactStyles.dupeNumber}>
+                                        {entry._resolvedNumber.number}
+                                    </Text>
+                                    {entry._resolvedNumber.label && (
+                                        <Text style={contactStyles.dupeLabel}>
+                                            {entry._resolvedNumber.label}
+                                        </Text>
+                                    )}
+                                </View>
+                                <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
+                            </TouchableOpacity>
+                        ))}
+
+                        <TouchableOpacity
+                            style={contactStyles.cancelBtn}
+                            onPress={closeDupeModal}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={contactStyles.cancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </TouchableOpacity>
+                </TouchableOpacity>
+            </Modal>
+        </>
+    );
+
+    return { openContactSheet, renderModals };
+}
+
+// ─── Contact Styles ───────────────────────────────────────────────────────────
+const contactStyles = StyleSheet.create({
+
+
+    
+    sheetHandle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: C.border,
+        alignSelf: "center",
+        marginBottom: 4,
+    },
+    sheetHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    sheetTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: C.text,
+        letterSpacing: -0.3,
+    },
+    sheetSubtitle: {
+        fontSize: 13,
+        color: C.textSecondary,
+    },
+    closeBtn: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: C.bg,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    // Search
+    searchBar: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        backgroundColor: C.bg,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: C.border,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: C.text,
+        padding: 0,
+    },
+
+    // Contact rows
+    contactRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 12,
+    },
+    separator: {
+        height: 1,
+        backgroundColor: C.border,
+        marginLeft: 64,
+    },
+    avatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: C.primaryLight,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    avatarText: {
+        fontSize: 17,
+        fontWeight: "700",
+        color: C.primary,
+    },
+    contactName: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.text,
+    },
+    contactNumber: {
+        fontSize: 12,
+        color: C.textSecondary,
+        marginTop: 2,
+    },
+
+    // Loading / empty
+    centered: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 48,
+        gap: 12,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: C.textSecondary,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: C.textMuted,
+    },
+
+    // Duplicate resolver
+    dupeRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        borderRadius: 14,
+        backgroundColor: C.bg,
+        borderWidth: 1,
+        borderColor: C.border,
+    },
+    dupeIconWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
+        backgroundColor: C.primaryFaded,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    dupeNumber: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.text,
+    },
+    dupeLabel: {
+        fontSize: 12,
+        color: C.textSecondary,
+        marginTop: 2,
+        textTransform: "capitalize",
+    },
+
+    // Cancel button
+    cancelBtn: {
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: "center",
+        backgroundColor: C.bg,
+        borderWidth: 1,
+        borderColor: C.border,
+        marginTop: 4,
+    },
+    cancelText: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.textSecondary,
+    },
+});
 
 function SegmentedControl({ options, selected, onSelect }) {
     return (
@@ -118,41 +527,202 @@ function SegmentedControl({ options, selected, onSelect }) {
     );
 }
 
-function Dropdown({ label, options, selected, onSelect }) {
+function Dropdown({ selectedClothTypes, onToggle }) {
     const [open, setOpen] = useState(false);
+
+    // Derive just the id array for the MultiSelect value prop
+    const selectedIds = selectedClothTypes.map(c => c.id);
+    console.log("==============", selectedClothTypes);
+
+    const handleChange = (newSelectedIds) => {
+        // Figure out what changed
+        const added = newSelectedIds.filter(id => !selectedIds.includes(id));
+        const removed = selectedIds.filter(id => !newSelectedIds.includes(id));
+
+        added.forEach(id => onToggle(id));
+        removed.forEach(id => onToggle(id));
+    };
+
     return (
         <View style={styles.inputWrapper}>
-            {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
-            <TouchableOpacity
-                style={styles.dropdown}
-                onPress={() => setOpen((p) => !p)}
-                activeOpacity={0.75}
-            >
-                <Text style={styles.dropdownText}>{selected}</Text>
-                <Text style={styles.dropdownChevron}>{open ? "▲" : "▼"}</Text>
-            </TouchableOpacity>
-            {open && (
-                <View style={styles.dropdownMenu}>
-                    {options.map((opt) => (
-                        <TouchableOpacity
-                            key={opt}
-                            style={[styles.dropdownItem, opt === selected && styles.dropdownItemActive]}
-                            onPress={() => { onSelect(opt); setOpen(false); }}
-                            activeOpacity={0.7}
+            <MultiSelect
+                style={{ height: 50, borderWidth: 1, borderColor: "#ccc", borderRadius: 8, paddingHorizontal: 10, }}
+                data={CLOTH_TYPES}                   // [{ label: "Ikoti", value: "ikoti" }, ...]
+                labelField="label"
+                valueField="value"
+                search
+                searchPlaceholder="Search..."
+                placeholder="Ubwoko bw' imyenda yafashwe..."
+                placeholderStyle={{ color: "gray" }}
+                value={selectedIds}                  // controlled by parent state
+                onChange={handleChange}
+                renderItem={(item) => {
+                    const isSelected = selectedIds.includes(item.value);
+
+                    return (
+                        <View
+                            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 15, backgroundColor: isSelected ? C.primaryLight : "white", }}
                         >
-                            <Text
-                                style={[styles.dropdownItemText, opt === selected && styles.dropdownItemTextActive]}
-                            >
-                                {opt}
-                            </Text>
-                            {opt === selected && <Text style={{ color: C.primary }}>✓</Text>}
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
+                            <Text>{item.label}</Text>
+                            {isSelected && (
+                                <Ionicons name="checkmark" size={22} color={C.primary} />
+                            )}
+                        </View>
+                    );
+                }}
+            />
         </View>
     );
 }
+
+//cloth dynamic properties setter
+
+function useClothSelector(selectedClothTypes, setSelectedClothTypes) {
+
+    // Build a fresh unit with defaults based on config
+    const makeUnit = (config) => ({
+        ...(config.hasColor && { color: "White" }),
+        ...(config.hasSize && { size: SIZE_SCALES[config.sizeType][0] }),
+    });
+
+    // ── Toggle: add or remove a cloth type ──────────────────────────────────────
+    const toggleClothType = useCallback((id) => {
+        setSelectedClothTypes(prev => {
+            const exists = prev.find(c => c.id === id);
+
+            // Already selected → remove it
+            if (exists) return prev.filter(c => c.id !== id);
+
+            // Not selected → build the initial object
+            const config = CLOTH_CONFIG[id];
+            const needsUnits = config.hasColor || config.hasSize;
+
+            return [...prev, {
+                id,
+                label: config.label,
+                quantity: 1,
+                units: needsUnits ? [makeUnit(config)] : [],
+            }];
+        });
+    }, [setSelectedClothTypes]);
+
+    // ── Change quantity: grow or shrink units array ──────────────────────────────
+    const changeQuantity = useCallback((id, delta) => {
+        setSelectedClothTypes(prev => prev.map(c => {
+            if (c.id !== id) return c;
+
+            const config = CLOTH_CONFIG[id];
+            const newQty = Math.max(1, c.quantity + delta);
+            const needsUnits = config.hasColor || config.hasSize;
+
+            if (!needsUnits) return { ...c, quantity: newQty };
+
+            let units = [...c.units];
+
+            if (delta > 0) {
+                // Adding a unit → append with defaults
+                units.push(makeUnit(config));
+            } else if (delta < 0 && units.length > 1) {
+                // Removing a unit → pop the last one
+                units.pop();
+            }
+
+            return { ...c, quantity: newQty, units };
+        }));
+    }, [setSelectedClothTypes]);
+
+    // ── Update a single field on a specific unit ─────────────────────────────────
+    const updateUnit = useCallback((clothId, unitIndex, key, value) => {
+        setSelectedClothTypes(prev => prev.map(c => {
+            if (c.id !== clothId) return c;
+
+            const updatedUnits = c.units.map((unit, i) =>
+                i === unitIndex ? { ...unit, [key]: value } : unit
+            );
+
+            return { ...c, units: updatedUnits };
+        }));
+    }, [setSelectedClothTypes]);
+
+    // ── Render all cloth cards ───────────────────────────────────────────────────
+    const renderClothCards = useCallback(() => {
+        if (selectedClothTypes.length === 0) {
+            return (
+                <View style={styles.emptyClothHint}>
+                    <Text style={styles.emptyClothHintText}>
+                        Select cloth types above to configure them
+                    </Text>
+                </View>
+            );
+        }
+
+        return selectedClothTypes.map((item) => {
+            const config = CLOTH_CONFIG[item.id];
+            const needsUnits = config.hasColor || config.hasSize;
+            const sizeOptions = config.hasSize ? SIZE_SCALES[config.sizeType] : [];
+
+            return (
+                <View key={item.id} style={{ backgroundColor: C.primaryFaded, paddingLeft: 10, borderRadius: 10, paddingBottom: 10 }}>
+
+                    {/* ── Card Header ── */}
+                    <View style={styles.clothCardHead}>
+                        <Text style={{ fontSize: 16, color: C.primary }}>{item.label} :</Text>
+                    </View>
+
+                    {/* ── Quantity selector (always shown) ── */}
+                    <View style={styles.inputWrapper}>
+                        <Text style={styles.inputLabel}>Umubare w' <Text>{item.label}</Text></Text>
+                        <QuantitySelector
+                            value={item.quantity}
+                            onChange={(delta) => changeQuantity(item.id, delta)}
+                        />
+                    </View>
+
+                    {/* ── Per-unit configuration (only if cloth has color or size) ── */}
+                    {needsUnits && item.units.map((unit, index) => (
+                        <View key={index} style={styles.unitRow}>
+
+                            <Text style={{ alignSelf: 'center', fontSize: 15, paddingTop: 10 }}>
+                                {item.quantity > 1 ? <Text>{item.label} ya {index + 1}</Text> : "Details"}
+                            </Text>
+                            <View style={{ borderWidth: 0.4, borderColor: 'gray' }}></View>
+
+                            {/* Color chips */}
+                            {config.hasColor && (
+                                <View style={[styles.inputWrapper, { paddingTop: 10 }]}>
+                                    <Text style={styles.inputLabel}>Color:</Text>
+                                    <ChipGroup
+                                        options={COLORS}
+                                        selected={unit.color}
+                                        onSelect={(v) => updateUnit(item.id, index, "color", v)}
+                                        colorMode
+                                    />
+                                </View>
+                            )}
+
+                            {/* Size chips */}
+                            {config.hasSize && (
+                                <View style={[styles.inputWrapper, { paddingTop: 10 }]}>
+                                    <Text style={styles.inputLabel}>Size: </Text>
+                                    <ChipGroup
+                                        options={sizeOptions}
+                                        selected={unit.size}
+                                        onSelect={(v) => updateUnit(item.id, index, "size", v)}
+                                    />
+                                </View>
+                            )}
+
+                        </View>
+                    ))}
+
+                </View>
+            );
+        });
+    }, [selectedClothTypes, changeQuantity, updateUnit]);
+
+    return { toggleClothType, changeQuantity, updateUnit, renderClothCards };
+}
+
 
 function ChipGroup({ options, selected, onSelect, colorMode }) {
     return (
@@ -192,7 +762,7 @@ function QuantitySelector({ value, onChange }) {
         <View style={styles.quantityRow}>
             <TouchableOpacity
                 style={[styles.qtyBtn, value <= 1 && styles.qtyBtnDisabled]}
-                onPress={() => value > 1 && onChange(value - 1)}
+                onPress={() => value > 1 && onChange(-1)}  // ← delta, not value - 1
                 activeOpacity={0.7}
             >
                 <Text style={styles.qtyBtnText}>−</Text>
@@ -200,7 +770,7 @@ function QuantitySelector({ value, onChange }) {
             <Text style={styles.qtyValue}>{value}</Text>
             <TouchableOpacity
                 style={styles.qtyBtn}
-                onPress={() => onChange(value + 1)}
+                onPress={() => onChange(+1)}               // ← delta, not value + 1
                 activeOpacity={0.7}
             >
                 <Text style={styles.qtyBtnText}>+</Text>
@@ -209,126 +779,444 @@ function QuantitySelector({ value, onChange }) {
     );
 }
 
-function PhotoRow({ photos }) {
-    return (
-        <View style={styles.photoRow}>
-            {photos.map((photo, i) => (
-                <TouchableOpacity key={i} style={styles.photoPlaceholder} activeOpacity={0.75}>
-                    {photo ? (
-                        <Image source={{ uri: photo }} style={styles.photoImage} />
-                    ) : (
-                        <View style={styles.photoEmpty}>
-                            <Text style={styles.photoEmptyIcon}>📷</Text>
+
+// image handler
+
+function useImagePicker(images, setImages) {
+
+    const [modalVisible, setModalVisible] = useState(false);
+
+    // ── Request permissions ────────────────────────────────────────────────────
+    const requestCameraPermission = async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert(
+                "Permission needed",
+                "Please allow camera access in your device settings to take photos.",
+                [{ text: "OK" }]
+            );
+            return false;
+        }
+        return true;
+    };
+
+    const requestGalleryPermission = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert(
+                "Permission needed",
+                "Please allow photo library access in your device settings to pick images.",
+                [{ text: "OK" }]
+            );
+            return false;
+        }
+        return true;
+    };
+
+    // ── Launch camera ─────────────────────────────────────────────────────────
+    const openCamera = async () => {
+        setModalVisible(false);
+
+        const granted = await requestCameraPermission();
+        if (!granted) return;
+
+        const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets?.length > 0) {
+            setImages(prev => [...prev, result.assets[0].uri]);
+        }
+    };
+
+    // ── Launch gallery ─────────────────────────────────────────────────────────
+    const openGallery = async () => {
+        setModalVisible(false);
+
+        const granted = await requestGalleryPermission();
+        if (!granted) return;
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsMultipleSelection: true,
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets?.length > 0) {
+            const uris = result.assets.map(a => a.uri);
+            setImages(prev => [...prev, ...uris]);
+        }
+    };
+
+    // ── Remove a single image ──────────────────────────────────────────────────
+    const removeImage = (index) => {
+        setImages(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // ── Source picker modal ────────────────────────────────────────────────────
+    const SourceModal = useCallback(() => (
+        <Modal
+            visible={modalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setModalVisible(false)}
+        >
+            {/* Backdrop */}
+            <TouchableOpacity
+                style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end", }}
+                activeOpacity={1}
+                onPress={() => setModalVisible(false)}
+            >
+                <StatusBar style="auto" backgroundColor='transparent' />
+                {/* Sheet — stop tap propagation so tapping inside doesn't close */}
+                <TouchableOpacity
+                    activeOpacity={1}
+                    style={imagePickerStyles.sheet}
+                    onPress={() => { }}
+                >
+                    <View style={imagePickerStyles.sheetHandle} />
+
+                    <Text style={imagePickerStyles.sheetTitle}>Add Photos</Text>
+                    <Text style={imagePickerStyles.sheetSubtitle}>
+                        Choose how you want to add photos of the clothes
+                    </Text>
+
+                    {/* Camera option */}
+                    <TouchableOpacity
+                        style={imagePickerStyles.optionBtn}
+                        onPress={openCamera}
+                        activeOpacity={0.75}
+                    >
+                        <View style={imagePickerStyles.optionIconWrap}>
+                            <Ionicons name="camera" size={22} color={C.primary} />
                         </View>
-                    )}
+                        <View style={imagePickerStyles.optionTextWrap}>
+                            <Text style={imagePickerStyles.optionLabel}>Take a Photo</Text>
+                            <Text style={imagePickerStyles.optionDesc}>Use your camera</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
+                    </TouchableOpacity>
+
+                    {/* Gallery option */}
+                    <TouchableOpacity
+                        style={imagePickerStyles.optionBtn}
+                        onPress={openGallery}
+                        activeOpacity={0.75}
+                    >
+                        <View style={imagePickerStyles.optionIconWrap}>
+                            <Ionicons name="images" size={22} color={C.primary} />
+                        </View>
+                        <View style={imagePickerStyles.optionTextWrap}>
+                            <Text style={imagePickerStyles.optionLabel}>Choose from Gallery</Text>
+                            <Text style={imagePickerStyles.optionDesc}>Pick one or more photos</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={18} color={C.textMuted} />
+                    </TouchableOpacity>
+
+                    {/* Cancel */}
+                    <TouchableOpacity
+                        style={imagePickerStyles.cancelBtn}
+                        onPress={() => setModalVisible(false)}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={imagePickerStyles.cancelText}>Cancel</Text>
+                    </TouchableOpacity>
+
                 </TouchableOpacity>
-            ))}
+            </TouchableOpacity>
+        </Modal>
+    ), [modalVisible]);
+
+    // ── Image row renderer ─────────────────────────────────────────────────────
+    const renderImageRow = useCallback(() => (
+        <View style={imagePickerStyles.section}>
+
+            {/* Add button */}
+            <TouchableOpacity
+                style={imagePickerStyles.addBtn}
+                onPress={() => setModalVisible(true)}
+                activeOpacity={0.75}
+            >
+                <Ionicons name="camera-outline" size={20} color={C.primary} />
+                <Text style={imagePickerStyles.addBtnText}>Add Photos</Text>
+            </TouchableOpacity>
+
+            {/* Horizontal scroll of picked images */}
+            {images.length > 0 && (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={imagePickerStyles.imageScroll}
+                >
+                    {images.map((uri, index) => (
+                        <View key={index} style={imagePickerStyles.imageWrapper}>
+
+                            <Image
+                                source={{ uri }}
+                                style={imagePickerStyles.image}
+                            />
+
+                            {/* X button */}
+                            <TouchableOpacity
+                                style={imagePickerStyles.removeBtn}
+                                onPress={() => removeImage(index)}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="close" size={12} color="#fff" />
+                            </TouchableOpacity>
+
+                        </View>
+                    ))}
+                </ScrollView>
+            )}
+
         </View>
-    );
+    ), [images]);
+
+    return { renderImageRow, SourceModal };
 }
+// ─── Image Picker Styles ──────────────────────────────────────────────────────
+const imagePickerStyles = StyleSheet.create({
+
+    section: {
+        gap: 12,
+    },
+
+    // Add button
+    addBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        alignSelf: "flex-start",
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderStyle: "dashed",
+        borderColor: C.primary,
+        backgroundColor: C.primaryFaded,
+    },
+    addBtnText: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: C.primary,
+    },
+
+    // Horizontal image scroll
+    imageScroll: {
+        gap: 10,
+        paddingVertical: 4,
+        paddingHorizontal: 2,
+    },
+    imageWrapper: {
+        position: "relative",
+    },
+    image: {
+        width: 90,
+        height: 90,
+        borderRadius: 12,
+        backgroundColor: C.border,
+    },
+
+    // X remove button
+    removeBtn: {
+        position: "absolute",
+        top: 5,
+        right: 5,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: "rgba(0,0,0,0.55)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+
+    // Bottom sheet
+    sheet: {
+        backgroundColor: C.card,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingBottom: 36,
+        paddingTop: 14,
+        gap: 12,
+    },
+    sheetHandle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: C.border,
+        alignSelf: "center",
+        marginBottom: 8,
+    },
+    sheetTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: C.text,
+        letterSpacing: -0.3,
+    },
+    sheetSubtitle: {
+        fontSize: 13,
+        color: C.textSecondary,
+        marginBottom: 4,
+    },
+
+    // Option rows
+    optionBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        borderRadius: 14,
+        backgroundColor: C.bg,
+        borderWidth: 1,
+        borderColor: C.border,
+    },
+    optionIconWrap: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        backgroundColor: C.primaryFaded,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    optionTextWrap: {
+        flex: 1,
+        gap: 2,
+    },
+    optionLabel: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.text,
+    },
+    optionDesc: {
+        fontSize: 12,
+        color: C.textSecondary,
+    },
+
+    // Cancel
+    cancelBtn: {
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: "center",
+        backgroundColor: C.bg,
+        borderWidth: 1,
+        borderColor: C.border,
+        marginTop: 4,
+    },
+    cancelText: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.textSecondary,
+    },
+});
+
 
 function DateSelector({ label, date, onPress }) {
     return (
-        <TouchableOpacity style={styles.dateSelector} onPress={onPress} activeOpacity={0.75}>
-            <View style={styles.dateLabelRow}>
-                <Text style={styles.inputLabel}>{label}</Text>
-            </View>
+        <TouchableOpacity
+            style={styles.dateSelector}
+            onPress={onPress}
+            activeOpacity={0.75}
+        >
+            <Text style={styles.inputLabel}>{label}</Text>
             <View style={styles.dateValueRow}>
-                <Text style={styles.dateIcon}>📅</Text>
+                <Ionicons name="calendar" size={18} color={C.primary} />
                 <Text style={styles.dateText}>{date}</Text>
-                <Text style={styles.dateChevron}>›</Text>
+                <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
             </View>
         </TouchableOpacity>
     );
 }
+const dateStyles = StyleSheet.create({
+    backdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        justifyContent: "flex-end",
+    },
+    sheet: {
+        backgroundColor: C.card,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingBottom: 36,
+        paddingTop: 14,
+        gap: 12,
+    },
+    sheetHandle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: C.border,
+        alignSelf: "center",
+        marginBottom: 8,
+    },
+    sheetTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: C.text,
+        letterSpacing: -0.3,
+    },
+    confirmBtn: {
+        backgroundColor: C.primary,
+        borderRadius: 14,
+        paddingVertical: 14,
+        alignItems: "center",
+        marginTop: 8,
+    },
+    confirmText: {
+        fontSize: 15,
+        fontWeight: "700",
+        color: "#fff",
+    },
+});
 
-function ItemCard({ item, onUpdate, onRemove, canRemove }) {
-    const update = useCallback(
-        (key, val) => onUpdate(item.id, key, val),
-        [item.id, onUpdate]
-    );
 
-    return (
-        <View style={styles.itemCard}>
-            {/* Cloth Type */}
-            <Dropdown
-                label="Cloth Type"
-                options={CLOTH_TYPES}
-                selected={item.clothType}
-                onSelect={(v) => update("clothType", v)}
-            />
-
-            {/* Color */}
-            <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Color</Text>
-                <ChipGroup
-                    options={COLORS}
-                    selected={item.color}
-                    onSelect={(v) => update("color", v)}
-                    colorMode
-                />
-            </View>
-
-            {/* Size */}
-            <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Size</Text>
-                <ChipGroup
-                    options={SIZES}
-                    selected={item.size}
-                    onSelect={(v) => update("size", v)}
-                />
-            </View>
-
-            {/* Quantity */}
-            <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Quantity</Text>
-                <QuantitySelector
-                    value={item.quantity}
-                    onChange={(v) => update("quantity", v)}
-                />
-            </View>
-
-            {/* Photos */}
-            <View style={styles.inputWrapper}>
-                <Text style={styles.inputLabel}>Photos</Text>
-                <TouchableOpacity style={styles.addPhotoBtn} activeOpacity={0.7}>
-                    <Text style={styles.addPhotoBtnText}>+ Add Photos</Text>
-                </TouchableOpacity>
-                <PhotoRow photos={item.photos} />
-            </View>
-
-            {/* Remove */}
-            {canRemove && (
-                <TouchableOpacity
-                    style={styles.removeBtn}
-                    onPress={() => onRemove(item.id)}
-                    activeOpacity={0.7}
-                >
-                    <Text style={styles.removeBtnText}>🗑 Remove Item</Text>
-                </TouchableOpacity>
-            )}
-        </View>
-    );
-}
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function NewBookingScreen() {
     // Client section
-    const [clientType, setClientType] = useState("Client");
+    const [clientType, setClientType] = useState("Decorator");
     const [clientName, setClientName] = useState("");
     const [phone, setPhone] = useState("");
+    // Hook call — destructure renderModals instead of ContactSheet
+    const { openContactSheet, renderModals: renderContactModals } = useContactPicker(setClientName, setPhone);
 
     // Items
-    const [items, setItems] = useState([makeItem()]);
+    const [items, setItems] = useState([]);
+    const [selectedClothTypes, setSelectedClothTypes] = useState([]);
+
+    const {
+        toggleClothType,
+        renderClothCards,
+    } = useClothSelector(selectedClothTypes, setSelectedClothTypes);
+
+    //images
+    const [bookingImages, setBookingImages] = useState([]);
+
+    const { renderImageRow, SourceModal } = useImagePicker(bookingImages, setBookingImages);
 
     // Dates
-    const [bookingDate, setBookingDate] = useState("29 Jul 2026");
-    const [returnDate, setReturnDate] = useState("2 Aug 2026");
+    const [bookingDate, setBookingDate] = useState(new Date());
+    const [returnDate, setReturnDate] = useState(new Date());
+    const [activePicker, setActivePicker] = useState(null);
+    // Format: 29/07/2026
+    const formatDate = (date) => {
+        const d = String(date.getDate()).padStart(2, "0");
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const y = date.getFullYear();
+        return `${d}/${m}/${y}`;
+    };
 
     // Payment
-    const [totalAmount, setTotalAmount] = useState("150000");
-    const [amountPaid, setAmountPaid] = useState("50000");
+    const [totalAmount, setTotalAmount] = useState();
+    const [amountPaid, setAmountPaid] = useState();
+
 
     const remaining = Math.max(
         0,
@@ -356,6 +1244,32 @@ export default function NewBookingScreen() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
             <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+            <SourceModal />
+            {renderContactModals()}
+
+            {/* ── Date Picker ── */}
+            {/* ── Date Picker ── */}
+            {activePicker && (
+                <DateTimePicker
+                    value={activePicker === "booking" ? bookingDate : returnDate}
+                    mode="date"
+                    display="default"
+                    minimumDate={activePicker === "return" ? bookingDate : new Date()}
+                    
+                    onChange={(event, selectedDate) => {
+                        setActivePicker(null); // always close after selection or dismiss
+
+                        if (event.type === "dismissed" || !selectedDate) return;
+
+                        if (activePicker === "booking") {
+                            setBookingDate(selectedDate);
+                            if (selectedDate > returnDate) setReturnDate(selectedDate);
+                        } else {
+                            setReturnDate(selectedDate);
+                        }
+                    }}
+                />
+            )}
 
             <ScrollView
                 style={{ flex: 1 }}
@@ -375,18 +1289,20 @@ export default function NewBookingScreen() {
                         <View style={styles.inputWrapper}>
                             <Text style={styles.inputLabel}>Names</Text>
                             <TextInput
-                                style={[styles.textInput, focused && styles.textInputFocused]}
+                                style={[styles.textInput, { width: 275 }]}
                                 value={clientName}
                                 onChangeText={setClientName}
                                 placeholder="names..."
                                 placeholderTextColor={C.textMuted}
-                                keyboardType={keyboardType}
-                                
+                                cursorColor={C.primary}
+
+
+
                             />
                         </View>
 
-                        <TouchableOpacity style={{ backgroundColor: C.primary, borderRadius: 15 }}>
-                            <Ionicons name="person" size={20} color={"white"} style={{ padding: 20, alignSelf: 'center' }} />
+                        <TouchableOpacity style={{ backgroundColor: C.primary, borderRadius: 15, justifyContent: 'center', height: 52, top: 22 }} onPress={openContactSheet}>
+                            <Ionicons name="person" size={15} color={"white"} style={{ padding: 20 }} />
                         </TouchableOpacity>
                     </View>
                     <OutlinedInput
@@ -401,51 +1317,45 @@ export default function NewBookingScreen() {
 
                 {/* ── Section 2: Booking Items ── */}
                 <SectionCard>
-                    <SectionHeader icon="" title="Booking Items" />
+                    <SectionHeader icon="" title="Bookings" />
 
-                    {items.map((item, index) => (
-                        <View key={item.id}>
-                            {index > 0 && <View style={styles.itemDivider} />}
-                            {items.length > 1 && (
-                                <Text style={styles.itemIndex}>Item {index + 1}</Text>
-                            )}
-                            <ItemCard
-                                item={item}
-                                onUpdate={updateItem}
-                                onRemove={removeItem}
-                                canRemove={items.length > 1}
-                            />
-                        </View>
-                    ))}
+                    <Dropdown
+                        selectedClothTypes={selectedClothTypes}
+                        onToggle={toggleClothType}
+                    />
+                    {renderClothCards()}
+                    {renderImageRow()}
 
-                    <TouchableOpacity style={styles.addItemBtn} onPress={addItem} activeOpacity={0.7}>
-                        <Text style={styles.addItemBtnText}>+ Add Another Item</Text>
-                    </TouchableOpacity>
+
                 </SectionCard>
 
                 {/* ── Section 3: Dates ── */}
                 <SectionCard>
                     <SectionHeader icon="" title="Dates" />
                     <View style={styles.datesRow}>
+
                         <View style={{ flex: 1 }}>
                             <DateSelector
-                                label="Booking Date"
-                                date={bookingDate}
-                                onPress={() => { }}
+                                label="Booking Date (today)"
+                                date={formatDate(bookingDate)}
+                                onPress={() => setActivePicker("booking")}   // ← was () => {}
                             />
                         </View>
+
                         <View style={styles.dateSeparator}>
                             <View style={styles.dateLine} />
                             <Text style={styles.dateArrow}>→</Text>
                             <View style={styles.dateLine} />
                         </View>
+
                         <View style={{ flex: 1 }}>
                             <DateSelector
                                 label="Return Date"
-                                date={returnDate}
-                                onPress={() => { }}
+                                date={formatDate(returnDate)}
+                                onPress={() => setActivePicker("return")}    // ← was () => {}
                             />
                         </View>
+
                     </View>
                 </SectionCard>
 
@@ -713,7 +1623,8 @@ const styles = StyleSheet.create({
     },
     chipActive: {
         borderColor: C.primary,
-        backgroundColor: C.primaryFaded,
+        backgroundColor: C.primary,
+        
     },
     chipText: {
         fontSize: 13,
@@ -721,7 +1632,8 @@ const styles = StyleSheet.create({
         color: C.textSecondary,
     },
     chipTextActive: {
-        color: C.primary,
+        color: "white",
+        fontWeight:"bold"
     },
     colorDot: {
         width: 12,
@@ -770,6 +1682,140 @@ const styles = StyleSheet.create({
         borderRightWidth: 1,
         borderColor: C.border,
         lineHeight: 44,
+    },
+    addBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        alignSelf: "flex-start",
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderStyle: "dashed",
+        borderColor: C.primary,
+        backgroundColor: C.primaryFaded,
+    },
+    addBtnText: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: C.primary,
+    },
+
+    // Horizontal image scroll
+    imageScroll: {
+        gap: 10,
+        paddingVertical: 4,
+        paddingHorizontal: 2,
+    },
+    imageWrapper: {
+        position: "relative",
+    },
+    image: {
+        width: 90,
+        height: 90,
+        borderRadius: 12,
+        backgroundColor: C.border,
+    },
+
+    // X remove button
+    removeBtn: {
+        position: "absolute",
+        top: 5,
+        right: 5,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: "rgba(0,0,0,0.55)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+
+    // Modal backdrop
+    backdrop: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.45)",
+        justifyContent: "flex-end",
+    },
+
+    // Bottom sheet
+    sheet: {
+        backgroundColor: C.card,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingBottom: 36,
+        paddingTop: 14,
+        gap: 12,
+    },
+    sheetHandle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: C.border,
+        alignSelf: "center",
+        marginBottom: 8,
+    },
+    sheetTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: C.text,
+        letterSpacing: -0.3,
+    },
+    sheetSubtitle: {
+        fontSize: 13,
+        color: C.textSecondary,
+        marginBottom: 4,
+    },
+
+    // Option rows
+    optionBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        borderRadius: 14,
+        backgroundColor: C.bg,
+        borderWidth: 1,
+        borderColor: C.border,
+    },
+    optionIconWrap: {
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        backgroundColor: C.primaryFaded,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    optionTextWrap: {
+        flex: 1,
+        gap: 2,
+    },
+    optionLabel: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.text,
+    },
+    optionDesc: {
+        fontSize: 12,
+        color: C.textSecondary,
+    },
+
+    // Cancel
+    cancelBtn: {
+        paddingVertical: 14,
+        borderRadius: 14,
+        alignItems: "center",
+        backgroundColor: C.bg,
+        borderWidth: 1,
+        borderColor: C.border,
+        marginTop: 4,
+    },
+    cancelText: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: C.textSecondary,
     },
 
     // Photos

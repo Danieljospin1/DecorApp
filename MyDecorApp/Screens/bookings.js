@@ -167,8 +167,6 @@ export default function BookingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
 
-      <Text style={styles.title}>Bookings</Text>
-
       <FlatList
         data={BOOKINGS}
         keyExtractor={(item) => item.id}
@@ -179,7 +177,7 @@ export default function BookingsScreen() {
       <TouchableOpacity
         style={styles.fab}
         activeOpacity={0.85}
-      onPress={()=>{navigation.navigate('NewBooking');}}>
+      onPress={()=>{navigation.navigate('New Booking');}}>
         <Ionicons
           name="add"
           size={32}
@@ -209,7 +207,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    
   },
 
   card: {

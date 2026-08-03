@@ -16,10 +16,11 @@ export default function BookingsStack() {
       <Stack.Screen
         name="Bookings"
         component={BookingsScreen}
+        
       />
 
       <Stack.Screen
-        name="NewBooking"
+        name="New Booking"
         component={NewBookingScreen}
       />
     </Stack.Navigator>
