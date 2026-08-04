@@ -6,13 +6,14 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
-  
+
 } from "react-native";
 import { StatusBar } from 'expo-status-bar';
 import ImageViewing from "react-native-image-viewing";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from '@react-navigation/native';
+
 
 const BOOKINGS = [
   {
@@ -81,6 +82,17 @@ const BOOKINGS = [
       "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800",
     ],
   },
+  {
+    id: "7",
+    customer: "Alice Mukamana",
+    weddingDate: "22 Aug 2026",
+    stage: "Reserved",
+    images: [
+      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800",
+      "https://images.unsplash.com/photo-1521119989659-a83eee488004?w=800",
+      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=800",
+    ],
+  },
 ];
 
 export default function BookingsScreen() {
@@ -112,8 +124,8 @@ export default function BookingsScreen() {
                     index === 0
                       ? "-10deg"
                       : index === 1
-                      ? "0deg"
-                      : "10deg",
+                        ? "0deg"
+                        : "10deg",
                 },
               ],
               zIndex: index,
@@ -130,7 +142,7 @@ export default function BookingsScreen() {
     <TouchableOpacity
       activeOpacity={0.2}
       style={styles.card}
-      onPress={() => console.log("Navigate to Booking Details")}
+      onPress={() => {navigation.navigate("Booking Details");}}
     >
       {renderImages(item.images)}
 
@@ -166,6 +178,13 @@ export default function BookingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Text style={styles.title}>Bookings</Text>
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={imageIndex}
+        visible={viewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+      />
 
       <FlatList
         data={BOOKINGS}
@@ -177,7 +196,7 @@ export default function BookingsScreen() {
       <TouchableOpacity
         style={styles.fab}
         activeOpacity={0.85}
-      onPress={()=>{navigation.navigate('New Booking');}}>
+        onPress={() => { navigation.navigate('New Booking'); }}>
         <Ionicons
           name="add"
           size={32}
@@ -185,12 +204,7 @@ export default function BookingsScreen() {
         />
       </TouchableOpacity>
 
-      <ImageViewing
-        images={viewerImages}
-        imageIndex={imageIndex}
-        visible={viewerVisible}
-        onRequestClose={() => setViewerVisible(false)}
-      />
+
 
     </SafeAreaView>
   );
@@ -203,11 +217,12 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 30,
+    fontSize: 25,
     fontWeight: "700",
-    color: "#111827",
+    color: "#0F766E",
     paddingHorizontal: 20,
-    
+    paddingBottom:20
+
   },
 
   card: {

@@ -1196,6 +1196,7 @@ export default function NewBookingScreen() {
     const [clientType, setClientType] = useState("Decorator");
     const [clientName, setClientName] = useState("");
     const [phone, setPhone] = useState("");
+    const [address,setAddress]=useState("");//this is the address of decorator in the building ed:f2-72
     // Hook call — destructure renderModals instead of ContactSheet
     const { openContactSheet, renderModals: renderContactModals } = useContactPicker(setClientName, setPhone);
 
@@ -1323,6 +1324,15 @@ export default function NewBookingScreen() {
                         keyboardType="phone-pad"
                         placeholder="07XX XXX XXX"
                     />
+                    {clientType=="Decorator" ? (
+                        <OutlinedInput
+                        label="Umuryango"
+                        value={address}
+                        onChange={setAddress}
+                        keyboardType="default"
+                        placeholder="f2-7..."
+                    />
+                    ):null}
 
                 </SectionCard>
 
