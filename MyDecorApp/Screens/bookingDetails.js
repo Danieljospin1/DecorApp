@@ -79,7 +79,7 @@ const getDaysInfo = (returnDate) => {
     const diff = Math.round((ret - today) / (1000 * 60 * 60 * 24));
     if (diff > 0) return { label: `${diff} day${diff !== 1 ? "s" : ""} remaining`, type: "ok" };
     if (diff === 0) return { label: "Due today", type: "warning" };
-    return { label: `${Math.abs(diff)} day${Math.abs(diff) !== 1 ? "s" : ""} overdue`, type: "overdue" };
+    return { label: `${Math.abs(diff) !== 1 ? "Iminsi" : "Umunsi"} ${Math.abs(diff)} irenzeho ku itariki yo gutarura.`, type: "overdue" };
 };
 
 const STATUS_CONFIG = {
@@ -192,12 +192,12 @@ export default function BookingDetailsScreen({ navigation, route }) {
     // Mark every unit of every cloth as returned
     const handleAllReturned = useCallback(() => {
         Alert.alert(
-            "Confirm Return",
-            "Mark all clothes as returned?",
+            "Kwemeza gutarura",
+            "Wemeje ko imyenda yose yafashwe yataruwe?",
             [
-                { text: "Cancel", style: "cancel" },
+                { text: "Oya", style: "cancel" },
                 {
-                    text: "Confirm",
+                    text: "Yego",
                     onPress: () =>
                         setReturnState(prev =>
                             prev.map(item => ({
@@ -549,7 +549,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
                         {/* Handle + header */}
                         <View style={detailStyles.sheetHandle} />
                         <View style={detailStyles.returnSheetHeader}>
-                            <Text style={detailStyles.returnSheetTitle}>Mark Returned Items</Text>
+                            <Text style={detailStyles.returnSheetTitle}>Emeza ibyataruwe</Text>
                             <TouchableOpacity
                                 onPress={() => setPartialSheetVisible(false)}
                                 style={detailStyles.returnSheetClose}
@@ -559,7 +559,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
                             </TouchableOpacity>
                         </View>
                         <Text style={detailStyles.returnSheetSubtitle}>
-                            Check each item that has been returned
+                            Suzuma neza ibyaba byataruwe ubyemeze
                         </Text>
 
                         {/* Checklist */}
@@ -983,7 +983,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
                             ) : (
                                 <View style={detailStyles.remainingBlock}>
                                     <View>
-                                        <Text style={detailStyles.remainingLabel}>Remaining Balance</Text>
+                                        <Text style={detailStyles.remainingLabel}>Asigaye kwishyurwa</Text>
                                         <Text style={detailStyles.remainingNote}>Auto-calculated</Text>
                                     </View>
                                     <Text style={detailStyles.remainingAmount}>
