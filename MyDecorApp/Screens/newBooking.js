@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, StatusBar, Image, Platform, KeyboardAvoidingView, Modal, ActivityIndicator, FlatList } from "react-native";
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, StatusBar, Image, Platform, KeyboardAvoidingView, Modal, ActivityIndicator, FlatList,Alert } from "react-native";
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { MultiSelect } from "react-native-element-dropdown";
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Contacts from 'expo-contacts';
 import { saveBookingImages } from "../utils/fileHandler";
+import { createBooking } from "../database/queries/newBookingQuery";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
     primary: "#0F766E",
@@ -44,37 +46,37 @@ const CLOTH_CONFIG = {
     ikoti: { label: "Ikoti", hasColor: true, hasSize: true, sizeType: "number" },
     ishati: { label: "Ishati", hasColor: true, hasSize: true, sizeType: "letter" },
     umukenyero: { label: "Umukenyero", hasColor: false, hasSize: false, sizeType: null },
-    bridesUmukenyero:{label:"Umukenyero(umugeni)", hasColor:false,hasSize:false,hasType:null},
-    groomsUmukenyero:{label:"Umukenyero(umukwe)", hasColor:false,hasSize:false,hasType:null},
-    boysUmukenyero:{label:"Umukenyero(abasore)", hasColor:false,hasSize:false,hasType:null},
-    childrenUmukenyero: {label:"Umukenyero(abana)", hasColor:false,hasSize:false,hasType:null},
-    top: {label:"Top", hasColor:true,hasSize:false,hasType:null},
-    tie: {label:"Cravat",hasColor:false,hasSize:false,hasType:null},
-    noeud: {label:"Noeud (🎀)",hasColor:false,hasSize:false,hasType:null},
-    inkangara:{label:"Inkangara",hasColor:false,hasSize:false,hasType:null},
-    ibiseke:{label:"Ibiseke",hasColor:false,hasSize:false,hasType:null},
-    inkongoro:{label:"Inkongoro",hasColor:false,hasSize:false,hasType:null},
-    inigi:{label:"Inigi",hasColor:false,hasSize:false,hasType:null},
-    sakame:{label:"Sakame",hasColor:false,hasSize:false,hasType:null},
-    ururabo:{label:"Ururabo",hasColor:false,hasSize:false,hasType:null},
-    masaye:{label:"Masaye",hasColor:false,hasSize:false,hasType:null},
-    inkoni: {label:"Inkoni",hasColor:false,hasSize:false,hasType:null},
+    bridesUmukenyero: { label: "Umukenyero(umugeni)", hasColor: false, hasSize: false, hasType: null },
+    groomsUmukenyero: { label: "Umukenyero(umukwe)", hasColor: false, hasSize: false, hasType: null },
+    boysUmukenyero: { label: "Umukenyero(abasore)", hasColor: false, hasSize: false, hasType: null },
+    childrenUmukenyero: { label: "Umukenyero(abana)", hasColor: false, hasSize: false, hasType: null },
+    top: { label: "Top", hasColor: true, hasSize: false, hasType: null },
+    tie: { label: "Cravat", hasColor: false, hasSize: false, hasType: null },
+    noeud: { label: "Noeud (🎀)", hasColor: false, hasSize: false, hasType: null },
+    inkangara: { label: "Inkangara", hasColor: false, hasSize: false, hasType: null },
+    ibiseke: { label: "Ibiseke", hasColor: false, hasSize: false, hasType: null },
+    inkongoro: { label: "Inkongoro", hasColor: false, hasSize: false, hasType: null },
+    inigi: { label: "Inigi", hasColor: false, hasSize: false, hasType: null },
+    sakame: { label: "Sakame", hasColor: false, hasSize: false, hasType: null },
+    ururabo: { label: "Ururabo", hasColor: false, hasSize: false, hasType: null },
+    masaye: { label: "Masaye", hasColor: false, hasSize: false, hasType: null },
+    inkoni: { label: "Inkoni", hasColor: false, hasSize: false, hasType: null },
 };
 const CLOTH_TYPES = Object.entries(CLOTH_CONFIG).map(([id, c]) => ({
     value: id,
     label: c.label,
 }));
 const SIZE_SCALES = {
-    letter: ["XS", "S", "M", "L", "XL","XXL"],
+    letter: ["XS", "S", "M", "L", "XL", "XXL"],
     number: ["28", "30", "32", "34", "36", "38"],
 };
 
 const COLORS = [
     "White", "Black", "Blue", "Gold", "Red",
-    "Dark Blue", "Gray","Light Gray", "Chocolate", "Dark Red", "Dark Green",
+    "Dark Blue", "Gray", "Light Gray", "Chocolate", "Dark Red", "Dark Green",
     "Green", "Tan", "Pink",
 ];
-const SIZES = ["XS", "S", "M", "L", "XL","XXL"];
+const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
 const COLOR_DOT = {
     White: "#FFFFFF",
@@ -1218,12 +1220,13 @@ const dateStyles = StyleSheet.create({
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
-export default function NewBookingScreen() {
+export  default  function NewBookingScreen() {
+    const navigation = useNavigation();
     // Client section
     const [clientType, setClientType] = useState("Decorator");
     const [clientName, setClientName] = useState("");
     const [phone, setPhone] = useState("");
-    const [address,setAddress]=useState("");//this is the address of decorator in the building ed:f2-72
+    const [address, setAddress] = useState("");//this is the address of decorator in the building ed:f2-72
     // Hook call — destructure renderModals instead of ContactSheet
     const { openContactSheet, renderModals: renderContactModals } = useContactPicker(setClientName, setPhone);
 
@@ -1256,6 +1259,70 @@ export default function NewBookingScreen() {
     // Payment
     const [totalAmount, setTotalAmount] = useState();
     const [amountPaid, setAmountPaid] = useState();
+
+
+    const [isSaving, setIsSaving] = useState(false);
+
+
+    const handleSaveBooking = async () => {
+
+        if (isSaving) return;
+
+        try {
+
+            setIsSaving(true);
+
+
+            const result = await createBooking({
+                clientType: clientType,
+                clientName: clientName,
+                phone: phone,
+                address: address,
+
+                selectedClothTypes: selectedClothTypes,
+
+                bookingImages: bookingImages,
+
+                bookingDate: bookingDate,
+                returnDate: returnDate,
+
+                totalAmount: totalAmount,
+                amountPaid: amountPaid,
+            });
+
+
+            console.log(
+                "Booking saved successfully:",
+                result
+            );
+
+
+            
+            
+
+
+            
+             navigation.goBack();
+
+        } catch (error) {
+
+            console.error(
+                "[NewBookingScreen] Failed to save booking:",
+                error
+            );
+
+
+            Alert.alert(
+                "Could not save booking",
+                error.message ||
+                "Something went wrong. Please try again."
+            );
+
+        } finally {
+
+            setIsSaving(false);
+        }
+    };
 
 
     const remaining = Math.max(
@@ -1351,15 +1418,15 @@ export default function NewBookingScreen() {
                         keyboardType="phone-pad"
                         placeholder="07XX XXX XXX"
                     />
-                    {clientType=="Decorator" ? (
+                    {clientType == "Decorator" ? (
                         <OutlinedInput
-                        label="Umuryango"
-                        value={address}
-                        onChange={setAddress}
-                        keyboardType="default"
-                        placeholder="f2-7..."
-                    />
-                    ):null}
+                            label="Umuryango"
+                            value={address}
+                            onChange={setAddress}
+                            keyboardType="default"
+                            placeholder="f2-7..."
+                        />
+                    ) : null}
 
                 </SectionCard>
 
@@ -1447,9 +1514,19 @@ export default function NewBookingScreen() {
                 </SectionCard>
 
                 {/* ── Save Button ── */}
-                <TouchableOpacity style={styles.saveBtn} activeOpacity={0.85}>
-                    <Text style={styles.saveBtnText}>Save Booking</Text>
-                </TouchableOpacity>
+                {isSaving ? (
+                    <View style={styles.saveBtnDisabled}>
+                        <Text style={styles.saveBtnText}>Saving...</Text>
+                    </View>
+                ) : clientType && clientName && phone && selectedClothTypes.length > 0 && totalAmount ? (
+                    <TouchableOpacity style={styles.saveBtn} activeOpacity={0.85} onPress={handleSaveBooking} disabled={isSaving}>
+                        <Text style={styles.saveBtnText}>Save Booking</Text>
+                    </TouchableOpacity>
+                ):(
+                    <View style={[styles.saveBtn,styles.saveBtnDisabled]}>
+                        <Text style={[styles.saveBtnText,{color: C.textMuted}]}>Save Booking</Text>
+                    </View>
+                )}
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -1680,7 +1757,7 @@ const styles = StyleSheet.create({
     },
     chipTextActive: {
         color: "white",
-        fontWeight:"bold"
+        fontWeight: "bold"
     },
     colorDot: {
         width: 12,
@@ -2045,6 +2122,10 @@ const styles = StyleSheet.create({
         shadowRadius: 16,
         elevation: 6,
         marginTop: 4,
+    },
+    saveBtnDisabled: {
+        backgroundColor: C.primaryFaded,
+
     },
     saveBtnText: {
         fontSize: 16,
