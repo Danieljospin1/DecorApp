@@ -5,6 +5,7 @@ import { MultiSelect } from "react-native-element-dropdown";
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Contacts from 'expo-contacts';
+import { saveBookingImages } from "../utils/fileHandler";
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
     primary: "#0F766E",

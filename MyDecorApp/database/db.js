@@ -5,8 +5,8 @@ let dbInstance = null;
 
 export async function GetDBConnection() {
   if (!dbInstance) {
-    dbInstance = await SQLite.openDatabaseAsync('localDB.db');
-    console.log('Database connection opened.');
+    dbInstance = await SQLite.openDatabaseAsync('myDecor.db');
+    console.log('Database connection opened.',dbInstance);
   }
   return dbInstance;
 }
