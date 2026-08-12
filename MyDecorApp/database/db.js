@@ -1,5 +1,12 @@
-import * as SQLite from "expo-sqlite";
 
-const db = SQLite.openDatabaseSync("mydecor.db");
+import * as SQLite from 'expo-sqlite';
 
-export default db;
+let dbInstance = null;
+
+export async function GetDBConnection() {
+  if (!dbInstance) {
+    dbInstance = await SQLite.openDatabaseAsync('localDB.db');
+    console.log('Database connection opened.');
+  }
+  return dbInstance;
+}

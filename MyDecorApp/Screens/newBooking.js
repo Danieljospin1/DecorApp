@@ -38,32 +38,57 @@ const makeItem = () => ({
 
 const CLOTH_CONFIG = {
     gown: { label: "Ikanzu y' abageni", hasColor: false, hasSize: false, sizeType: null },
+    malene: { label: "Ikanzu ya Malene", hasColor: false, hasSize: false, sizeType: null },
+    suit: { label: "Costume (ikoti n' ipantaro)", hasColor: true, hasSize: false, sizeType: null },
     ikoti: { label: "Ikoti", hasColor: true, hasSize: true, sizeType: "number" },
-    umukenyero: { label: "Umukenyero", hasColor: false, hasSize: false, sizeType: null },
-    malene: { label: "Malene", hasColor: false, hasSize: false, sizeType: null },
-    top: { label: "Top", hasColor: true, hasSize: false, sizeType: null },
     ishati: { label: "Ishati", hasColor: true, hasSize: true, sizeType: "letter" },
+    umukenyero: { label: "Umukenyero", hasColor: false, hasSize: false, sizeType: null },
+    bridesUmukenyero:{label:"Umukenyero(umugeni)", hasColor:false,hasSize:false,hasType:null},
+    groomsUmukenyero:{label:"Umukenyero(umukwe)", hasColor:false,hasSize:false,hasType:null},
+    boysUmukenyero:{label:"Umukenyero(abasore)", hasColor:false,hasSize:false,hasType:null},
+    childrenUmukenyero: {label:"Umukenyero(abana)", hasColor:false,hasSize:false,hasType:null},
+    top: {label:"Top", hasColor:true,hasSize:false,hasType:null},
+    tie: {label:"Cravat",hasColor:false,hasSize:false,hasType:null},
+    noeud: {label:"Noeud (🎀)",hasColor:false,hasSize:false,hasType:null},
+    inkangara:{label:"Inkangara",hasColor:false,hasSize:false,hasType:null},
+    ibiseke:{label:"Ibiseke",hasColor:false,hasSize:false,hasType:null},
+    inkongoro:{label:"Inkongoro",hasColor:false,hasSize:false,hasType:null},
+    inigi:{label:"Inigi",hasColor:false,hasSize:false,hasType:null},
+    sakame:{label:"Sakame",hasColor:false,hasSize:false,hasType:null},
+    ururabo:{label:"Ururabo",hasColor:false,hasSize:false,hasType:null},
+    masaye:{label:"Masaye",hasColor:false,hasSize:false,hasType:null},
+    inkoni: {label:"Inkoni",hasColor:false,hasSize:false,hasType:null},
 };
 const CLOTH_TYPES = Object.entries(CLOTH_CONFIG).map(([id, c]) => ({
     value: id,
     label: c.label,
 }));
 const SIZE_SCALES = {
-    letter: ["XS", "S", "M", "L", "XL"],
+    letter: ["XS", "S", "M", "L", "XL","XXL"],
     number: ["28", "30", "32", "34", "36", "38"],
 };
 
-const COLORS = ["White", "Black", "Blue", "blue fonce", "Gold", "Red"];
-const SIZES = ["XS", "S", "M", "L", "XL"];
+const COLORS = [
+    "White", "Black", "Blue", "Gold", "Red",
+    "Dark Blue", "Gray","Light Gray", "Chocolate", "Dark Red", "Dark Green",
+    "Green", "Tan", "Pink",
+];
+const SIZES = ["XS", "S", "M", "L", "XL","XXL"];
 
 const COLOR_DOT = {
     White: "#FFFFFF",
     Black: "#1E293B",
     Blue: "#3B82F6",
-    bleuFonce: "#00008B",
     Gold: "#F59E0B",
     Red: "#EF4444",
-
+    "Dark Blue": "#1E3A8A",
+    Gray: "#6B7280",
+    Chocolate: "#7B3F00",
+    "Dark Red": "#991B1B",
+    "Dark Green": "#166534",
+    Green: "#22C55E",
+    Tan: "#D2B48C",
+    Pink: "#EC4899",
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -545,6 +570,7 @@ function Dropdown({ selectedClothTypes, onToggle }) {
     // Derive just the id array for the MultiSelect value prop
     const selectedIds = selectedClothTypes.map(c => c.id);
     console.log("==============", selectedClothTypes);
+    console.log("==============units", selectedClothTypes[0]);
 
     const handleChange = (newSelectedIds) => {
         // Figure out what changed
@@ -564,7 +590,7 @@ function Dropdown({ selectedClothTypes, onToggle }) {
                 valueField="value"
                 search
                 searchPlaceholder="Search..."
-                placeholder="Ubwoko bw' imyenda yafashwe..."
+                placeholder="Hitamo ibyaba byafashwe..."
                 placeholderStyle={{ color: "gray" }}
                 value={selectedIds}                  // controlled by parent state
                 onChange={handleChange}

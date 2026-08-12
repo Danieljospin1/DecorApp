@@ -1,5 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
+import AppInitiator from '../splashScreen';
 import BookingsScreen from '../Screens/bookings';
 import NewBookingScreen from '../Screens/newBooking';
 import BookingDetailsScreen from '../Screens/bookingDetails';
@@ -14,6 +14,7 @@ export default function BookingsStack() {
 
       }}
     >
+      <Stack.Screen name="AppInitiator" component={AppInitiator} options={{ headerShown: false }} />
       <Stack.Screen
         name="Bookings"
         component={BookingsScreen}
