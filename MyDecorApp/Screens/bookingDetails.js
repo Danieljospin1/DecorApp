@@ -12,9 +12,15 @@ import {
     Share,
     Alert,
     TextInput,
-    Linking
+    Linking,
+    ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { getBookingDetails } from "../database/queries/bookingDetailsQuery";
+import { updateBookingReturns } from "../database/queries/updateBookingReturns";
+import { updateBookingPayment } from "../database/queries/updateBookingPayment";
+import { formatRWF } from "../utils/format";
 
 // ─── Design Tokens (same as NewBookingScreen) ─────────────────────────────────
 const C = {
@@ -35,51 +41,6 @@ const C = {
     warningFaded: "#FFFBEB",
     success: "#059669",
     successFaded: "#ECFDF5",
-};
-
-// ─── Dummy Booking Data ───────────────────────────────────────────────────────
-const DUMMY_BOOKING = {
-    id: "BK-2026-0042",
-    clientName: "Kalisa Jean Pierre",
-    clientPhone: "+250 788 123 456",
-    clientType: "Decorator",
-    status: "active",
-    bookingDate: new Date(2026, 6, 29),
-    returnDate: new Date(2026, 7, 2),
-    clothes: [
-        { id: "gown", label: "Gown", quantity: 2, units: [] },
-        { id: "ikoti", label: "Ikoti", quantity: 2, units: [{ color: "Black", size: "32" }, { color: "Blue", size: "30" }] },
-        { id: "ishati", label: "Ishati", quantity: 1, units: [{ color: "White", size: "L" }] },
-    ],
-    photos: [
-        "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=300",
-        "https://images.unsplash.com/photo-1555529771-835f59fc5efe?w=300",
-        "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=300",
-    ],
-    totalAmount: 150000,
-    amountPaid: 50000,
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const formatDate = (date) => {
-    const d = String(date.getDate()).padStart(2, "0");
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
-};
-
-const formatRWF = (n) =>
-    n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-
-const getDaysInfo = (returnDate) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const ret = new Date(returnDate);
-    ret.setHours(0, 0, 0, 0);
-    const diff = Math.round((ret - today) / (1000 * 60 * 60 * 24));
-    if (diff > 0) return { label: `${diff} day${diff !== 1 ? "s" : ""} remaining`, type: "ok" };
-    if (diff === 0) return { label: "Due today", type: "warning" };
-    return { label: `${Math.abs(diff) !== 1 ? "Iminsi" : "Umunsi"} ${Math.abs(diff)} irenzeho ku itariki yo gutarura.`, type: "overdue" };
 };
 
 const STATUS_CONFIG = {
@@ -138,46 +99,98 @@ function ColorDot({ color }) {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function BookingDetailsScreen({ navigation, route }) {
+    const { bookingId } = route.params;
 
-    const booking = DUMMY_BOOKING; // swap for route.params.booking later
+    // ── Loaded booking + load state ─────────────────────────────────────────────
+    const [booking, setBooking] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
 
     const [menuVisible, setMenuVisible] = useState(false);
     const [deleteVisible, setDeleteVisible] = useState(false);
 
-    //calling client directly
-    const callClient = useCallback(async () => {
-        const url = `tel:${booking.clientPhone.replace(/\s+/g, "")}`;
+    // ── Return tracking state ─────────────────────────────────────────────────
+    // Seeded from whatever the DB actually has (via applyBookingData below) —
+    // NOT reset to "nothing returned" on every load like the dummy version
+    // did. That would have silently discarded real return progress every
+    // time this screen re-opened.
+    const [returnState, setReturnState] = useState([]);
+    const [partialSheetVisible, setPartialSheetVisible] = useState(false);
+    const [draftReturn, setDraftReturn] = useState([]);
 
+    // ── Payment edit state ────────────────────────────────────────────────────
+    const [paymentEditMode, setPaymentEditMode] = useState(false);
+    const [draftTotal, setDraftTotal] = useState("0");
+    const [draftPaid, setDraftPaid] = useState("0");
+    const [paymentError, setPaymentError] = useState("");
+    const [historyVisible, setHistoryVisible] = useState(false);
+
+    // ── Load / reload from DB ─────────────────────────────────────────────────
+    const applyBookingData = useCallback((data) => {
+        setBooking(data);
+        setReturnState(
+            data.clothes.map((cloth) => ({
+                id: cloth.id, // booking_clothes UUID — see bookingDetailsQuery.js note
+                label: cloth.label,
+                quantity: cloth.quantity,
+                units: cloth.units.map((u) => ({ ...u })),
+                returnedCount: cloth.returnedCount,
+            }))
+        );
+    }, []);
+
+    // Reusable for both the initial/focus load AND refreshing after a
+    // mutation — after any write, we refetch the canonical formatted state
+    // (status, remainingAmount, payment history, etc.) rather than trying
+    // to hand-patch local state and risk it drifting from what's actually
+    // in the DB.
+    const loadBooking = useCallback(async () => {
+        try {
+            const data = await getBookingDetails(bookingId);
+            if (!data) {
+                Alert.alert(
+                    "Booking not found",
+                    "This booking may have been deleted.",
+                    [{ text: "OK", onPress: () => navigation?.goBack() }]
+                );
+                return;
+            }
+            applyBookingData(data);
+            setLoadError(null);
+        } catch (err) {
+            console.error("[BookingDetailsScreen] failed to load booking:", err);
+            setLoadError(err.message);
+        }
+    }, [bookingId, navigation, applyBookingData]);
+
+    // Reload every time this screen gains focus — coming back from the edit
+    // flow (once wired) should show whatever changed there.
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
+            setLoading(true);
+            loadBooking().finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+            return () => { cancelled = true; };
+        }, [loadBooking])
+    );
+
+    // ── Call client ───────────────────────────────────────────────────────────
+    const callClient = useCallback(async () => {
+        if (!booking) return;
+        const url = `tel:${booking.clientPhone.replace(/\s+/g, "")}`;
         try {
             await Linking.openURL(url);
         } catch (e) {
-            Alert.alert(
-                "Cannot make call",
-                "Something went wrong opening the phone app."
-            );
+            Alert.alert("Cannot make call", "Something went wrong opening the phone app.");
         }
-    }, [booking.clientPhone]);
-
-    // ── Return tracking state ─────────────────────────────────────────────────
-    const [returnState, setReturnState] = useState(() =>
-        booking.clothes.map(cloth => ({
-            id: cloth.id,
-            label: cloth.label,
-            quantity: cloth.quantity,
-            // clothes with units: copy each unit and add returned flag
-            units: cloth.units.map(u => ({ ...u, returned: false })),
-            // clothes without units (e.g. Gown): track by count
-            returnedCount: 0,
-        }))
-    );
-
-    const [partialSheetVisible, setPartialSheetVisible] = useState(false);
-    const [draftReturn, setDraftReturn] = useState([]);
+    }, [booking]);
 
     // ── Return helpers ────────────────────────────────────────────────────────
     const getReturnStatus = useCallback((item) => {
         const returned = item.units.length > 0
-            ? item.units.filter(u => u.returned).length
+            ? item.units.filter((u) => u.returned).length
             : item.returnedCount;
         if (returned === 0) return "none";
         if (returned === item.quantity) return "all";
@@ -185,11 +198,14 @@ export default function BookingDetailsScreen({ navigation, route }) {
     }, []);
 
     const allReturned = useMemo(
-        () => returnState.every(item => getReturnStatus(item) === "all"),
+        () => returnState.length > 0 && returnState.every((item) => getReturnStatus(item) === "all"),
         [returnState, getReturnStatus]
     );
 
-    // Mark every unit of every cloth as returned
+    // Mark every unit of every cloth as returned, persist it, then reload —
+    // the reload is what actually flips the status badge to "Returned",
+    // since that's computed server-side (updateBookingReturns derives
+    // bookings.status from whether every cloth came back).
     const handleAllReturned = useCallback(() => {
         Alert.alert(
             "Kwemeza gutarura",
@@ -198,25 +214,30 @@ export default function BookingDetailsScreen({ navigation, route }) {
                 { text: "Oya", style: "cancel" },
                 {
                     text: "Yego",
-                    onPress: () =>
-                        setReturnState(prev =>
-                            prev.map(item => ({
-                                ...item,
-                                returnedCount: item.quantity,
-                                units: item.units.map(u => ({ ...u, returned: true })),
-                            }))
-                        ),
+                    onPress: async () => {
+                        const updated = returnState.map((item) => ({
+                            ...item,
+                            returnedCount: item.quantity,
+                            units: item.units.map((u) => ({ ...u, returned: true })),
+                        }));
+                        try {
+                            await updateBookingReturns(bookingId, updated);
+                            await loadBooking();
+                        } catch (err) {
+                            Alert.alert("Couldn't update", err.message);
+                        }
+                    },
                 },
             ]
         );
-    }, []);
+    }, [returnState, bookingId, loadBooking]);
 
     // Open partial sheet with a draft copy
     const openPartialSheet = useCallback(() => {
         setDraftReturn(
-            returnState.map(item => ({
+            returnState.map((item) => ({
                 ...item,
-                units: item.units.map(u => ({ ...u })),
+                units: item.units.map((u) => ({ ...u })),
             }))
         );
         setPartialSheetVisible(true);
@@ -224,26 +245,23 @@ export default function BookingDetailsScreen({ navigation, route }) {
 
     // Toggle one unit inside the draft (for clothes WITH units)
     const toggleDraftUnit = useCallback((clothId, unitIndex) => {
-        setDraftReturn(prev =>
-            prev.map(item => {
+        setDraftReturn((prev) =>
+            prev.map((item) => {
                 if (item.id !== clothId) return item;
                 const units = item.units.map((u, i) =>
                     i === unitIndex ? { ...u, returned: !u.returned } : u
                 );
-                return { ...item, units, returnedCount: units.filter(u => u.returned).length };
+                return { ...item, units, returnedCount: units.filter((u) => u.returned).length };
             })
         );
     }, []);
 
     // Toggle one anonymous unit (for clothes WITHOUT units, tracked by count)
     const toggleDraftAnonymous = useCallback((clothId, unitIndex) => {
-        setDraftReturn(prev =>
-            prev.map(item => {
+        setDraftReturn((prev) =>
+            prev.map((item) => {
                 if (item.id !== clothId) return item;
-                // represent anonymous units as a boolean array derived from returnedCount
-                const slots = Array.from({ length: item.quantity }, (_, i) =>
-                    i < item.returnedCount
-                );
+                const slots = Array.from({ length: item.quantity }, (_, i) => i < item.returnedCount);
                 slots[unitIndex] = !slots[unitIndex];
                 const newCount = slots.filter(Boolean).length;
                 return { ...item, returnedCount: newCount };
@@ -251,55 +269,46 @@ export default function BookingDetailsScreen({ navigation, route }) {
         );
     }, []);
 
-    // Commit draft to real state
-    const confirmPartial = useCallback(() => {
-        setReturnState(draftReturn);
-        setPartialSheetVisible(false);
-    }, [draftReturn]);
+    // Commit draft to the DB, then reload — same reasoning as handleAllReturned
+    const confirmPartial = useCallback(async () => {
+        try {
+            await updateBookingReturns(bookingId, draftReturn);
+            setPartialSheetVisible(false);
+            await loadBooking();
+        } catch (err) {
+            Alert.alert("Couldn't update", err.message);
+        }
+    }, [draftReturn, bookingId, loadBooking]);
 
-    // ── Payment state ─────────────────────────────────────────────────────────
-    const [totalAmount, setTotalAmount] = useState(booking.totalAmount);
-    const [amountPaid, setAmountPaid] = useState(booking.amountPaid);
-    const [paymentEditMode, setPaymentEditMode] = useState(false);
-
-    // Draft values — only committed on Save
-    const [draftTotal, setDraftTotal] = useState(String(booking.totalAmount));
-    const [draftPaid, setDraftPaid] = useState(String(booking.amountPaid));
-    const [paymentError, setPaymentError] = useState("");
-
-    // Payment history log
-    const [paymentHistory, setPaymentHistory] = useState([
-        { id: "1", amount: booking.amountPaid, date: formatDate(booking.bookingDate), note: "Initial deposit" },
-    ]);
-    const [historyVisible, setHistoryVisible] = useState(false);
-
-    // Derived
-    const remaining = totalAmount - amountPaid;
-    const fullyPaid = remaining === 0;
-
-    // Draft remaining — updates live while editing
-    const draftRemaining = Math.max(
-        0,
-        (parseInt(draftTotal) || 0) - (parseInt(draftPaid) || 0)
-    );
-
+    // ── Payment ────────────────────────────────────────────────────────────────
     const openPaymentEdit = useCallback(() => {
-        setDraftTotal(String(totalAmount));
-        setDraftPaid(String(amountPaid));
+        if (!booking) return;
+        setDraftTotal(String(booking.totalAmount));
+        setDraftPaid(String(booking.amountPaid));
         setPaymentError("");
         setPaymentEditMode(true);
-    }, [totalAmount, amountPaid]);
+    }, [booking]);
 
     const cancelPaymentEdit = useCallback(() => {
         setPaymentEditMode(false);
         setPaymentError("");
     }, []);
 
-    const savePayment = useCallback(() => {
+    // Live preview while editing — recalculated on every keystroke, same as
+    // the dummy version; this is display-only until Save actually commits.
+    const draftRemaining = Math.max(
+        0,
+        (parseInt(draftTotal) || 0) - (parseInt(draftPaid) || 0)
+    );
+
+    const savePayment = useCallback(async () => {
         const newTotal = parseInt(draftTotal) || 0;
         const newPaid = parseInt(draftPaid) || 0;
 
-        // Validation
+        // Client-side checks give instant feedback without a round trip.
+        // updateBookingPayment() re-validates the same rules independently —
+        // that's not redundant, it's the actual source of truth in case
+        // anything changed between load and save.
         if (newTotal <= 0) {
             setPaymentError("Total amount must be greater than 0.");
             return;
@@ -313,33 +322,22 @@ export default function BookingDetailsScreen({ navigation, route }) {
             return;
         }
 
-        // If paid amount increased, append to history
-        if (newPaid > amountPaid) {
-            const addedNow = newPaid - amountPaid;
-            setPaymentHistory(prev => [
-                ...prev,
-                {
-                    id: String(Date.now()),
-                    amount: addedNow,
-                    date: formatDate(new Date()),
-                    note: "Payment recorded",
-                },
-            ]);
+        try {
+            await updateBookingPayment(bookingId, { totalAmount: newTotal, amountPaid: newPaid });
+            setPaymentEditMode(false);
+            setPaymentError("");
+            await loadBooking(); // picks up new totals AND the new payment_history entry
+        } catch (err) {
+            setPaymentError(err.message);
         }
-
-        setTotalAmount(newTotal);
-        setAmountPaid(newPaid);
-        setPaymentEditMode(false);
-        setPaymentError("");
-    }, [draftTotal, draftPaid, amountPaid]);
-
-    const daysInfo = getDaysInfo(booking.returnDate);
-    const status = STATUS_CONFIG[booking.status];
+    }, [draftTotal, draftPaid, bookingId, loadBooking]);
 
     // ── Share ────────────────────────────────────────────────────────────────────
     const handleShare = useCallback(async () => {
-        const clothSummary = booking.clothes.map(c => {
-            const units = c.units.map(u =>
+        if (!booking) return;
+
+        const clothSummary = booking.clothes.map((c) => {
+            const units = c.units.map((u) =>
                 [u.color, u.size].filter(Boolean).join("/")
             ).join(", ");
             return units
@@ -348,7 +346,7 @@ export default function BookingDetailsScreen({ navigation, route }) {
         }).join("\n  ");
 
         const message =
-            `MyDecor Booking - ${booking.id}
+            `MyDecor Booking - ${booking.displayCode}
 
 Client: ${booking.clientName}
 Phone:  ${booking.clientPhone}
@@ -357,19 +355,19 @@ Type:   ${booking.clientType}
 Items:
   ${clothSummary}
 
-Booking Date: ${formatDate(booking.bookingDate)}
-Return Date:  ${formatDate(booking.returnDate)}
+Booking Date: ${booking.bookingDateFormatted}
+Return Date:  ${booking.returnDateFormatted}
 
-Total:     ${formatRWF(totalAmount)} RWF
-Paid:      ${formatRWF(amountPaid)} RWF
-Remaining: ${formatRWF(remaining)} RWF`;
+Total:     ${booking.totalAmountFormatted} RWF
+Paid:      ${booking.amountPaidFormatted} RWF
+Remaining: ${booking.remainingAmountFormatted} RWF`;
 
         try {
             await Share.share({ message });
         } catch (e) {
             console.log(e);
         }
-    }, [booking, remaining]);
+    }, [booking]);
 
     // ── Delete ───────────────────────────────────────────────────────────────────
     const handleDelete = useCallback(() => {
@@ -378,12 +376,17 @@ Remaining: ${formatRWF(remaining)} RWF`;
     }, []);
 
     const confirmDelete = useCallback(() => {
+        // NOTE: this still only navigates back — it does not delete
+        // anything from the DB. A real deleteBooking() mutation (soft
+        // delete via the deleted_at column already in the schema) is still
+        // outstanding; this rewrite only wired reads + returns + payment.
         setDeleteVisible(false);
         navigation?.goBack();
     }, [navigation]);
 
     // ── Custom header ────────────────────────────────────────────────────────────
     useEffect(() => {
+        if (!booking) return; // default header stays until the first load finishes
         navigation?.setOptions({
             headerTitle: () => (
                 <View style={headerStyles.titleContainer}>
@@ -411,7 +414,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={headerStyles.iconBtn}
-                        onPress={() => navigation?.navigate("NewBooking", { booking })}
+                        onPress={() => navigation?.navigate("NewBooking", { bookingId })}
                         activeOpacity={0.7}
                     >
                         <Ionicons name="create-outline" size={21} color={C.primary} />
@@ -429,7 +432,30 @@ Remaining: ${formatRWF(remaining)} RWF`;
             headerShadowVisible: false,
             headerStyle: { backgroundColor: C.bg },
         });
-    }, [booking, handleShare]);
+    }, [booking, handleShare, navigation, bookingId]);
+
+    // ── Loading / error states ──────────────────────────────────────────────────
+    if (loading) {
+        return (
+            <View style={detailStyles.centerFill}>
+                <ActivityIndicator size="large" color={C.primary} />
+            </View>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <View style={detailStyles.centerFill}>
+                <Text style={detailStyles.errorTitle}>Couldn't load this booking.</Text>
+                <Text style={detailStyles.errorSubtitle}>{loadError}</Text>
+            </View>
+        );
+    }
+
+    if (!booking) return null; // navigating away after the "not found" alert
+
+    const { daysInfo } = booking;
+    const status = STATUS_CONFIG[booking.status];
 
     // ─────────────────────────────────────────────────────────────────────────────
     return (
@@ -452,7 +478,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
 
                         <TouchableOpacity
                             style={detailStyles.menuItem}
-                            onPress={() => { setMenuVisible(false); navigation?.navigate("NewBooking", { booking }); }}
+                            onPress={() => { setMenuVisible(false); navigation?.navigate("NewBooking", { bookingId }); }}
                             activeOpacity={0.7}
                         >
                             <Ionicons name="create-outline" size={19} color={C.primary} />
@@ -663,9 +689,9 @@ Remaining: ${formatRWF(remaining)} RWF`;
                 contentContainerStyle={detailStyles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Booking ID + status */}
+                {/* Booking code + status */}
                 <View style={detailStyles.metaRow}>
-                    <Text style={detailStyles.bookingId}>{booking.id}</Text>
+                    <Text style={detailStyles.bookingId}>{booking.displayCode}</Text>
                     <View style={[detailStyles.statusBadge, { backgroundColor: status.bg }]}>
                         <Text style={[detailStyles.statusText, { color: status.color }]}>
                             {status.label}
@@ -697,7 +723,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
 
                 {/* ── Booked Items ── */}
                 <SectionCard>
-                    <SectionHeader icon="" title="Bookings" badge={booking.clothes.length} />
+                    <SectionHeader icon="" title="Bookings" badge={returnState.length} />
 
                     {returnState.map((item, ci) => {
                         const rStatus = getReturnStatus(item);
@@ -794,14 +820,14 @@ Remaining: ${formatRWF(remaining)} RWF`;
                     <View style={detailStyles.datesGrid}>
                         <View style={detailStyles.dateBlock}>
                             <Text style={detailStyles.dateBlockLabel}>Booking Date</Text>
-                            <Text style={detailStyles.dateBlockValue}>{formatDate(booking.bookingDate)}</Text>
+                            <Text style={detailStyles.dateBlockValue}>{booking.bookingDateFormatted}</Text>
                         </View>
                         <View style={detailStyles.dateArrowWrap}>
                             <Ionicons name="arrow-forward" size={16} color={C.textMuted} />
                         </View>
                         <View style={[detailStyles.dateBlock, { alignItems: "flex-end" }]}>
                             <Text style={detailStyles.dateBlockLabel}>Return Date</Text>
-                            <Text style={detailStyles.dateBlockValue}>{formatDate(booking.returnDate)}</Text>
+                            <Text style={detailStyles.dateBlockValue}>{booking.returnDateFormatted}</Text>
                         </View>
                     </View>
 
@@ -879,7 +905,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
                     <View style={detailStyles.sectionHeaderRow}>
 
                         <Text style={[detailStyles.sectionTitle, { flex: 1 }]}>Payment</Text>
-                        {!paymentEditMode && !fullyPaid && (
+                        {!paymentEditMode && !booking.fullyPaid && (
                             <TouchableOpacity
                                 style={detailStyles.paymentEditIcon}
                                 onPress={openPaymentEdit}
@@ -964,18 +990,18 @@ Remaining: ${formatRWF(remaining)} RWF`;
                         <>
                             <InfoRow
                                 label="Agomba Kwishyurwa"
-                                value={`${formatRWF(totalAmount)} RWF`}
+                                value={`${booking.totalAmountFormatted} RWF`}
                                 valueStyle={detailStyles.paymentTotal}
                             />
                             <View style={detailStyles.paymentDivider} />
                             <InfoRow
                                 label="Ayishyuwe"
-                                value={`${formatRWF(amountPaid)} RWF`}
+                                value={`${booking.amountPaidFormatted} RWF`}
                                 valueStyle={{ color: C.success, fontWeight: "600" }}
                             />
 
                             {/* Remaining or fully paid banner */}
-                            {fullyPaid ? (
+                            {booking.fullyPaid ? (
                                 <View style={detailStyles.fullyPaidBanner}>
                                     <Ionicons name="checkmark-circle" size={20} color={C.success} />
                                     <Text style={detailStyles.fullyPaidText}>Yose yishyuwe</Text>
@@ -987,7 +1013,7 @@ Remaining: ${formatRWF(remaining)} RWF`;
                                         <Text style={detailStyles.remainingNote}>Auto-calculated</Text>
                                     </View>
                                     <Text style={detailStyles.remainingAmount}>
-                                        {formatRWF(remaining)} RWF
+                                        {booking.remainingAmountFormatted} RWF
                                     </Text>
                                 </View>
                             )}
@@ -995,11 +1021,11 @@ Remaining: ${formatRWF(remaining)} RWF`;
                     )}
 
                     {/* ── Payment history log ── */}
-                    {paymentHistory.length > 0 && !paymentEditMode && (
+                    {booking.paymentHistory.length > 0 && !paymentEditMode && (
                         <>
                             <TouchableOpacity
                                 style={detailStyles.historyToggleRow}
-                                onPress={() => setHistoryVisible(v => !v)}
+                                onPress={() => setHistoryVisible((v) => !v)}
                                 activeOpacity={0.7}
                             >
                                 <Ionicons
@@ -1008,40 +1034,52 @@ Remaining: ${formatRWF(remaining)} RWF`;
                                     color={C.textSecondary}
                                 />
                                 <Text style={detailStyles.historyToggleText}>
-                                    Payment history · {paymentHistory.length} {paymentHistory.length === 1 ? "entry" : "entries"}
+                                    Payment history · {booking.paymentHistory.length} {booking.paymentHistory.length === 1 ? "entry" : "entries"}
                                 </Text>
                             </TouchableOpacity>
 
                             {historyVisible && (
                                 <View style={detailStyles.historyList}>
-                                    {paymentHistory.map((entry, i) => (
-                                        <View
-                                            key={entry.id}
-                                            style={[
-                                                detailStyles.historyRow,
-                                                i < paymentHistory.length - 1 && detailStyles.historyRowBorder,
-                                            ]}
-                                        >
-                                            {/* Left: dot + note + date */}
-                                            <View style={detailStyles.historyDot} />
-                                            <View style={{ flex: 1, gap: 2 }}>
-                                                <Text style={detailStyles.historyNote}>{entry.note}</Text>
-                                                <Text style={detailStyles.historyDate}>{entry.date}</Text>
+                                    {booking.paymentHistory.map((entry, i) => {
+                                        // amount can be negative now (payment corrections) —
+                                        // sign/color is a presentation choice made HERE,
+                                        // the query only ever returns a magnitude string.
+                                        const isNegative = entry.amount < 0;
+                                        return (
+                                            <View
+                                                key={entry.id}
+                                                style={[
+                                                    detailStyles.historyRow,
+                                                    i < booking.paymentHistory.length - 1 && detailStyles.historyRowBorder,
+                                                ]}
+                                            >
+                                                <View
+                                                    style={[
+                                                        detailStyles.historyDot,
+                                                        isNegative && { backgroundColor: C.danger },
+                                                    ]}
+                                                />
+                                                <View style={{ flex: 1, gap: 2 }}>
+                                                    <Text style={detailStyles.historyNote}>{entry.note}</Text>
+                                                    <Text style={detailStyles.historyDate}>{entry.dateFormatted}</Text>
+                                                </View>
+                                                <Text
+                                                    style={[
+                                                        detailStyles.historyAmount,
+                                                        isNegative && { color: C.danger },
+                                                    ]}
+                                                >
+                                                    {isNegative ? "-" : "+"}{entry.amountFormatted} RWF
+                                                </Text>
                                             </View>
-                                            {/* Right: amount */}
-                                            <Text style={detailStyles.historyAmount}>
-                                                +{formatRWF(entry.amount)} RWF
-                                            </Text>
-                                        </View>
-                                    ))}
+                                        );
+                                    })}
                                 </View>
                             )}
                         </>
                     )}
 
                 </SectionCard>
-
-
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -1098,6 +1136,26 @@ const headerStyles = StyleSheet.create({
 
 // ─── Screen Styles ────────────────────────────────────────────────────────────
 const detailStyles = StyleSheet.create({
+
+    centerFill: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: C.bg,
+        padding: 24,
+    },
+    errorTitle: {
+        fontSize: 16,
+        fontWeight: "700",
+        color: C.text,
+        marginBottom: 6,
+        textAlign: "center",
+    },
+    errorSubtitle: {
+        fontSize: 13,
+        color: C.textSecondary,
+        textAlign: "center",
+    },
 
     scrollContent: { padding: 16, gap: 16 },
 

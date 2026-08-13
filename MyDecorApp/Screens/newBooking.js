@@ -1298,10 +1298,6 @@ export  default  function NewBookingScreen() {
 
 
             
-            
-
-
-            
              navigation.goBack();
 
         } catch (error) {
