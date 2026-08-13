@@ -691,7 +691,7 @@ function useClothSelector(selectedClothTypes, setSelectedClothTypes) {
             return (
                 <View style={styles.emptyClothHint}>
                     <Text style={styles.emptyClothHintText}>
-                        Select cloth types above to configure them
+                        Hitamo ibyaba byafashwe muri iyi booking.
                     </Text>
                 </View>
             );

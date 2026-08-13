@@ -25,7 +25,7 @@ export async function getBookingDetails(bookingId) {
     `SELECT
        b.id, b.status, b.booking_date, b.return_date,
        b.total_amount, b.amount_paid, b.notes,
-       c.names AS client_name, c.phone AS client_phone, c.type AS client_type
+       c.names AS client_name, c.phone AS client_phone, c.type AS client_type, c.in_building_address AS client_address
      FROM bookings b
      JOIN clients c ON c.id = b.client_id
      WHERE b.id = ? AND b.deleted_at IS NULL`,
@@ -69,6 +69,7 @@ export async function getBookingDetails(bookingId) {
     clientName: booking.client_name,
     clientPhone: booking.client_phone,
     clientType: booking.client_type,
+    clientAddress: booking.client_address,
 
     status,
     statusLabel: STATUS_LABEL[status],

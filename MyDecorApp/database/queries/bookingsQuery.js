@@ -5,33 +5,23 @@ import { getBookingStatus } from "../../utils/bookingStatus";
 const MAX_CARD_PHOTOS = 3;
 const MAX_ITEM_LABELS_SHOWN = 2;
 
-const STATUS_LABEL = {
-  active: "Not yet returned",
-  overdue: "Overdue",
-  returned: "Returned",
-};
 
-// Returns bookings already shaped for BookingsScreen to render directly —
-// no math or string-building left for the screen to do:
+// Returns bookings already shaped for BookingsScreen.
 //
-//   {
-//     id, clientName,
-//     status: 'active' | 'overdue' | 'returned',   // resolved, never raw DB enum
-//     statusLabel: 'Not yet returned' | 'Overdue' | 'Returned',
-//     remainingAmount, isFullyPaid, paymentText,     // "20,000 RWF due" / "Fully paid" — screen just displays this
-//     itemsSummary,                                   // e.g. "Gown, Ikoti +1 more"
-//     photos,                                         // up to 3 local_uri strings, in order
-//   }
+// Status text is contextual:
 //
-// Deliberately does NOT include icon names or hex colors — which icon or
-// color represents "overdue" is a presentation choice, not a data one, and
-// belongs in the screen so this file stays reusable for anything else that
-// needs a bookings list (e.g. a future export or notifications feature)
-// without dragging UI decisions along with it.
+// active:
+//   - "Due today"
+//   - "Due tomorrow"
+//   - "Returns Aug 18"
 //
-// Sorted latest-created first (per your instruction) — no urgency-based
-// re-sorting here. If you want overdue bookings pinned to the top on top
-// of that later, that's a one-line change to the ORDER BY / a .sort() pass.
+// overdue:
+//   - "1 day late"
+//   - "3 days late"
+//
+// returned:
+//   - "Yarataruwe"
+//
 export async function getBookingsList() {
   const db = await GetDBConnection();
 
@@ -49,18 +39,12 @@ export async function getBookingsList() {
     WHERE b.deleted_at IS NULL
     ORDER BY b.created_at DESC
   `);
-  // NOTE: doesn't check c.deleted_at — client soft-delete isn't a built
-  // feature yet, so this can't happen today. Revisit if it becomes one, so
-  // a deleted client's old bookings don't quietly disappear from history.
 
   if (bookingRows.length === 0) return [];
 
   const bookingIds = bookingRows.map((row) => row.id);
   const placeholders = bookingIds.map(() => "?").join(",");
 
-  // Two extra queries total, not one per booking (avoids N+1), grouped in
-  // JS afterward. Simple to read and doesn't depend on SQLite's JSON1
-  // extension being available on the device.
   const clothRows = await db.getAllAsync(
     `SELECT booking_id, cloth_label
      FROM booking_clothes
@@ -72,7 +56,8 @@ export async function getBookingsList() {
   const photoRows = await db.getAllAsync(
     `SELECT booking_id, local_uri
      FROM booking_photos
-     WHERE booking_id IN (${placeholders}) AND deleted_at IS NULL
+     WHERE booking_id IN (${placeholders})
+       AND deleted_at IS NULL
      ORDER BY booking_id, sort_order ASC`,
     bookingIds
   );
@@ -89,39 +74,164 @@ export async function getBookingsList() {
   );
 }
 
+
 function formatBookingRow(row, clothRows, photoRows) {
   const status = getBookingStatus(row);
-  const remainingAmount = Math.max(row.total_amount - row.amount_paid, 0);
+
+  const remainingAmount = Math.max(
+    row.total_amount - row.amount_paid,
+    0
+  );
+
   const isFullyPaid = remainingAmount === 0;
 
   return {
     id: row.id,
     clientName: row.client_name,
+
     status,
-    statusLabel: STATUS_LABEL[status],
+
+    // Context-aware instead of static status labels
+    statusLabel: getStatusLabel(status, row.return_date),
+
     remainingAmount,
     isFullyPaid,
+
     paymentText: isFullyPaid
       ? "Fully paid"
       : `${remainingAmount.toLocaleString()} RWF due`,
-    itemsSummary: buildItemsLabel(clothRows.map((c) => c.cloth_label)),
-    photos: photoRows.slice(0, MAX_CARD_PHOTOS).map((p) => p.local_uri),
+
+    itemsSummary: buildItemsLabel(
+      clothRows.map((c) => c.cloth_label)
+    ),
+
+    photos: photoRows
+      .slice(0, MAX_CARD_PHOTOS)
+      .map((p) => p.local_uri),
   };
 }
 
-function buildItemsLabel(labels) {
-  if (labels.length === 0) return "No items";
-  if (labels.length <= MAX_ITEM_LABELS_SHOWN) return labels.join(", ");
-  return `${labels.slice(0, MAX_ITEM_LABELS_SHOWN).join(", ")} +${
-    labels.length - MAX_ITEM_LABELS_SHOWN
-  } more`;
+
+/**
+ * Creates the compact, useful text shown beside the booking.
+ *
+ * Examples:
+ *
+ * returned:
+ *   "Yarataruwe"
+ *
+ * active:
+ *   "Due today"
+ *   "Due tomorrow"
+ *   "Returns 8/18"
+ *
+ * overdue:
+ *   "1 day late"
+ *   "3 days late"
+ */
+function getStatusLabel(status, returnDate) {
+  if (status === "returned") {
+    return "Yarataruwe";
+  }
+
+  const today = startOfDay(new Date());
+  const returnDay = startOfDay(new Date(returnDate));
+
+  const daysDifference = getDaysDifference(today, returnDay);
+
+  // Return date is today
+  if (daysDifference === 0) {
+    return "Today";
+  }
+
+  // Return date is tomorrow
+  if (daysDifference === 1) {
+    return "Tomorrow";
+  }
+
+  // Return date has passed
+  if (status === "overdue") {
+    const daysLate = Math.abs(daysDifference);
+
+    return daysLate === 1
+      ? "1 day late"
+      : `${daysLate} days late`;
+  }
+
+  // Future return date
+  return `${formatShortDate(returnDay)}`;
 }
+
+
+/**
+ * Removes the time portion so date comparisons are based only
+ * on calendar days.
+ */
+function startOfDay(date) {
+  const result = new Date(date);
+
+  result.setHours(0, 0, 0, 0);
+
+  return result;
+}
+
+
+/**
+ * Returns:
+ *
+ *  1  → tomorrow
+ *  5  → 5 days from now
+ * -3  → 3 days ago
+ */
+function getDaysDifference(from, to) {
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+  return Math.round(
+    (to.getTime() - from.getTime()) / MS_PER_DAY
+  );
+}
+
+
+/**
+ * Example:
+ *
+ * 8/18
+ */
+function formatShortDate(date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "numeric",
+    
+
+  }).format(date);
+}
+
+
+function buildItemsLabel(labels) {
+  if (labels.length === 0) {
+    return "No items";
+  }
+
+  if (labels.length <= MAX_ITEM_LABELS_SHOWN) {
+    return labels.join(", ");
+  }
+
+  return `${labels
+    .slice(0, MAX_ITEM_LABELS_SHOWN)
+    .join(", ")} +${labels.length - MAX_ITEM_LABELS_SHOWN} more`;
+}
+
 
 function groupBy(rows, key) {
   return rows.reduce((acc, row) => {
     const k = row[key];
-    if (!acc[k]) acc[k] = [];
+
+    if (!acc[k]) {
+      acc[k] = [];
+    }
+
     acc[k].push(row);
+
     return acc;
   }, {});
 }

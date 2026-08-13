@@ -21,6 +21,7 @@ import { getBookingDetails } from "../database/queries/bookingDetailsQuery";
 import { updateBookingReturns } from "../database/queries/updateBookingReturns";
 import { updateBookingPayment } from "../database/queries/updateBookingPayment";
 import { formatRWF } from "../utils/format";
+import ImageViewing from "react-native-image-viewing";
 
 // ─── Design Tokens (same as NewBookingScreen) ─────────────────────────────────
 const C = {
@@ -105,6 +106,9 @@ export default function BookingDetailsScreen({ navigation, route }) {
     const [booking, setBooking] = useState(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
+    const [viewerVisible, setViewerVisible] = useState(false);
+    const [viewerImages, setViewerImages] = useState([]);
+    const [imageIndex, setImageIndex] = useState(0);
 
     const [menuVisible, setMenuVisible] = useState(false);
     const [deleteVisible, setDeleteVisible] = useState(false);
@@ -147,6 +151,7 @@ export default function BookingDetailsScreen({ navigation, route }) {
     const loadBooking = useCallback(async () => {
         try {
             const data = await getBookingDetails(bookingId);
+            console.log("================================================[BookingDetailsScreen] loaded booking:", data);
             if (!data) {
                 Alert.alert(
                     "Booking not found",
@@ -175,6 +180,21 @@ export default function BookingDetailsScreen({ navigation, route }) {
             return () => { cancelled = true; };
         }, [loadBooking])
     );
+    //images viewer 
+    const openViewer = (photos, index) => {
+        if (!photos || photos.length === 0) {
+            return;
+        }
+
+        setViewerImages(
+            photos.map((uri) => ({
+                uri,
+            }))
+        );
+
+        setImageIndex(index);
+        setViewerVisible(true);
+    };
 
     // ── Call client ───────────────────────────────────────────────────────────
     const callClient = useCallback(async () => {
@@ -533,11 +553,11 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                         </View>
                         <Text style={detailStyles.deleteTitle}>Delete Booking?</Text>
                         <Text style={detailStyles.deleteSubtitle}>
-                            {"This will permanently remove\n"}
+                            <Text>This will permanently remove </Text>
                             <Text style={{ fontWeight: "700", color: C.text }}>
                                 {booking.clientName}
                             </Text>
-                            {"'s booking.\nThis cannot be undone."}
+                            <Text>'s booking. This cannot be undone.</Text>
                         </Text>
                         <TouchableOpacity
                             style={detailStyles.deleteConfirmBtn}
@@ -684,6 +704,16 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                 </View>
             </Modal>
 
+            {/* ── Image viewer modal ── */}
+            <ImageViewing
+                images={viewerImages}
+                imageIndex={imageIndex}
+                visible={viewerVisible}
+                onRequestClose={() =>
+                    setViewerVisible(false)
+                }
+            />
+
             {/* ── Scroll content ── */}
             <ScrollView
                 contentContainerStyle={detailStyles.scrollContent}
@@ -714,9 +744,19 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                                 <Ionicons name="call-outline" size={14} color={C.textSecondary} />
                                 <Text style={detailStyles.clientPhone}>{booking.clientPhone}</Text>
                             </View>
-                            <View style={detailStyles.typePill}>
-                                <Text style={detailStyles.typePillText}>{booking.clientType}</Text>
-                            </View>
+                            {!booking.clientAddress  ? (
+                                <View style={detailStyles.typePill}>
+                                    <Text style={detailStyles.typePillText}>{booking.clientType}</Text>
+                                </View>
+                            ) : (
+                                <View style={{flexDirection: "row", alignItems: "center"}}>
+                                    <View style={detailStyles.typePill}>
+                                    <Text style={detailStyles.typePillText}>{booking.clientType}</Text>
+                                </View>
+                                <Text style={{alignSelf: "center"}}>-</Text>
+                                <Text style={detailStyles.clientPhone}> {booking.clientAddress}</Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </SectionCard>
@@ -805,7 +845,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                             contentContainerStyle={detailStyles.photoScroll}
                         >
                             {booking.photos.map((uri, i) => (
-                                <TouchableOpacity key={i} activeOpacity={0.85} style={detailStyles.photoWrapper}>
+                                <TouchableOpacity key={i} activeOpacity={0.85} style={detailStyles.photoWrapper} onPress={() => openViewer(booking.photos, i)}>
                                     <Image source={{ uri }} style={detailStyles.photo} resizeMode="cover" />
                                 </TouchableOpacity>
                             ))}
@@ -872,7 +912,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                         // All returned — show green confirmation banner
                         <View style={detailStyles.allReturnedBanner}>
                             <Ionicons name="checkmark-circle" size={20} color={C.success} />
-                            <Text style={detailStyles.allReturnedText}>Imyenda yose yataruwe</Text>
+                            <Text style={detailStyles.allReturnedText}>Imyenda yose yarataruwe</Text>
                         </View>
                     ) : (
                         // Return action buttons
@@ -935,7 +975,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
 
                             {/* Amount Paid input */}
                             <View style={detailStyles.paymentInputWrapper}>
-                                <Text style={detailStyles.paymentInputLabel}>Ayishyuwe kugeza ubu (RWF)</Text>
+                                <Text style={detailStyles.paymentInputLabel}>Ayishyuwe yose hamwe kugeza ubu (RWF)</Text>
                                 <TextInput
                                     style={detailStyles.paymentInput}
                                     value={draftPaid}

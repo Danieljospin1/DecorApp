@@ -1,6 +1,7 @@
 import { version } from "react";
 import { GetDBConnection } from "./db";
 import * as v1 from "./migrations/v1_init";
+import * as v2 from "./migrations/v2_check-in_tracking";
 
 // ─── Migration Registry ───────────────────────────────────────────────────────
 // Each migration must follow this shape:
@@ -19,6 +20,7 @@ import * as v1 from "./migrations/v1_init";
 
 const migrations = [
     { version: 1, up: v1.up, down: v1.down },
+    { version: 2, up: v2.up, down: v2.down },
 ];
 
 // ─── Ensure migrations table exists ──────────────────────────────────────────
