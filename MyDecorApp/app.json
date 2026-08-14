@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "MyDecorApp",
-    "slug": "MyDecorApp",
+    "name": "MyDecor",
+    "slug": "MyDecor",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/AppLogo.png",
