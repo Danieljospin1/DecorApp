@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, StatusBar, Image, Platform, KeyboardAvoidingView, Modal, ActivityIndicator, FlatList,Alert } from "react-native";
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, StatusBar, Image, Platform, KeyboardAvoidingView, Modal, ActivityIndicator, FlatList, Alert } from "react-native";
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { MultiSelect } from "react-native-element-dropdown";
 import * as ImagePicker from 'expo-image-picker';
@@ -39,7 +39,7 @@ const makeItem = () => ({
 });
 
 
-const CLOTH_CONFIG = {
+export const CLOTH_CONFIG = {
     gown: { label: "Ikanzu y' abageni", hasColor: false, hasSize: false, sizeType: null },
     malene: { label: "Ikanzu ya Malene", hasColor: false, hasSize: false, sizeType: null },
     suit: { label: "Costume (ikoti n' ipantaro)", hasColor: true, hasSize: false, sizeType: null },
@@ -567,7 +567,7 @@ function SegmentedControl({ options, selected, onSelect }) {
     );
 }
 
-function Dropdown({ selectedClothTypes, onToggle }) {
+export function Dropdown({ selectedClothTypes, onToggle }) {
     const [open, setOpen] = useState(false);
 
     // Derive just the id array for the MultiSelect value prop
@@ -618,7 +618,7 @@ function Dropdown({ selectedClothTypes, onToggle }) {
 
 //cloth dynamic properties setter
 
-function useClothSelector(selectedClothTypes, setSelectedClothTypes) {
+export function useClothSelector(selectedClothTypes, setSelectedClothTypes) {
 
     // Build a fresh unit with defaults based on config
     const makeUnit = (config) => ({
@@ -765,7 +765,7 @@ function useClothSelector(selectedClothTypes, setSelectedClothTypes) {
 }
 
 
-function ChipGroup({ options, selected, onSelect, colorMode }) {
+export function ChipGroup({ options, selected, onSelect, colorMode }) {
     return (
         <View style={styles.chipRow}>
             {options.map((opt) => {
@@ -798,7 +798,7 @@ function ChipGroup({ options, selected, onSelect, colorMode }) {
     );
 }
 
-function QuantitySelector({ value, onChange }) {
+export function QuantitySelector({ value, onChange }) {
     return (
         <View style={styles.quantityRow}>
             <TouchableOpacity
@@ -823,7 +823,7 @@ function QuantitySelector({ value, onChange }) {
 
 // image handler
 
-function useImagePicker(images, setImages) {
+export function useImagePicker(images, setImages) {
 
     const [modalVisible, setModalVisible] = useState(false);
 
@@ -1220,7 +1220,7 @@ const dateStyles = StyleSheet.create({
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
-export  default  function NewBookingScreen() {
+export default function NewBookingScreen() {
     const navigation = useNavigation();
     // Client section
     const [clientType, setClientType] = useState("Decorator");
@@ -1233,7 +1233,7 @@ export  default  function NewBookingScreen() {
     // Items
     const [items, setItems] = useState([]);
     const [selectedClothTypes, setSelectedClothTypes] = useState([]);
-    const [notes,setNotes]=useState(null);
+    const [notes, setNotes] = useState(null);
 
     const {
         toggleClothType,
@@ -1248,7 +1248,7 @@ export  default  function NewBookingScreen() {
     // Dates
     const [bookingDate, setBookingDate] = useState(new Date());
     const [returnDate, setReturnDate] = useState(new Date(Date.now() + 86400000));
-    console.log("===========returnDate",returnDate);
+    console.log("===========returnDate", returnDate);
     const [activePicker, setActivePicker] = useState(null);
     // Format: 29/07/2026
     const formatDate = (date) => {
@@ -1287,7 +1287,7 @@ export  default  function NewBookingScreen() {
 
                 bookingDate: bookingDate,
                 returnDate: returnDate,
-                notes:notes,
+                notes: notes,
 
                 totalAmount: totalAmount,
                 amountPaid: amountPaid,
@@ -1300,8 +1300,8 @@ export  default  function NewBookingScreen() {
             );
 
 
-            
-             navigation.goBack();
+
+            navigation.goBack();
 
         } catch (error) {
 
@@ -1472,20 +1472,20 @@ export  default  function NewBookingScreen() {
 
                     </View>
                 </SectionCard>
-                  {/* ── Section 5: Notes ── */}
+                {/* ── Section 5: Notes ── */}
                 <SectionCard>
                     <SectionHeader icon="" title="Notes" />
 
                     <View style={styles.inputWrapper}>
                         <TextInput
-                            style={[styles.textInput,{maxHeight:400,minHeight:50}]}
+                            style={[styles.textInput, { maxHeight: 400, minHeight: 50 }]}
                             value={notes}
                             onChangeText={setNotes}
                             keyboardType="default"
                             placeholderTextColor={C.textMuted}
                             placeholder="notes..."
                             multiline
-                            
+
                         />
                     </View>
                 </SectionCard>
@@ -1528,7 +1528,7 @@ export  default  function NewBookingScreen() {
                     </View>
                 </SectionCard>
 
-                
+
 
                 {/* ── Save Button ── */}
                 {isSaving ? (
@@ -1539,9 +1539,9 @@ export  default  function NewBookingScreen() {
                     <TouchableOpacity style={styles.saveBtn} activeOpacity={0.85} onPress={handleSaveBooking} disabled={isSaving}>
                         <Text style={styles.saveBtnText}>Save Booking</Text>
                     </TouchableOpacity>
-                ):(
-                    <View style={[styles.saveBtn,styles.saveBtnDisabled]}>
-                        <Text style={[styles.saveBtnText,{color: C.textMuted}]}>Save Booking</Text>
+                ) : (
+                    <View style={[styles.saveBtn, styles.saveBtnDisabled]}>
+                        <Text style={[styles.saveBtnText, { color: C.textMuted }]}>Save Booking</Text>
                     </View>
                 )}
 

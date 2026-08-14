@@ -42,13 +42,13 @@ export async function getBookingDetails(bookingId) {
     [bookingId]
   );
 
-  const photoRows = await db.getAllAsync(
-    `SELECT local_uri
+ const photoRows = await db.getAllAsync(
+    `SELECT id, local_uri
      FROM booking_photos
      WHERE booking_id = ? AND deleted_at IS NULL
      ORDER BY sort_order ASC`,
     [bookingId]
-  );
+);
 
   const historyRows = await db.getAllAsync(
     `SELECT id, amount, note, paid_at
@@ -99,7 +99,7 @@ export async function getBookingDetails(bookingId) {
       units: JSON.parse(row.units || "[]"),
     })),
 
-    photos: photoRows.map((r) => r.local_uri),
+    photos: photoRows.map((r) => ({ id: r.id, uri: r.local_uri })),
 
     totalAmount: booking.total_amount,
     amountPaid: booking.amount_paid,

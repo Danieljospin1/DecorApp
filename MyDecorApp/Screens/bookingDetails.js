@@ -22,6 +22,15 @@ import { updateBookingReturns } from "../database/queries/updateBookingReturns";
 import { updateBookingPayment } from "../database/queries/updateBookingPayment";
 import { formatRWF } from "../utils/format";
 import ImageViewing from "react-native-image-viewing";
+import { Dropdown } from "./newBooking";
+import { useClothSelector } from "./newBooking";
+import { ChipGroup } from "./newBooking";
+import { CLOTH_CONFIG } from "./newBooking";
+import { updateBookingNotes } from "../database/queries/updateBookingNotes";
+import { useImagePicker } from "./newBooking";
+import { updateBookingPhotos } from "../database/queries/updateBookingPhotos";
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { updateBookingReturnDate } from "../database/queries/updateBookingReturnDate";
 
 // ─── Design Tokens (same as NewBookingScreen) ─────────────────────────────────
 const C = {
@@ -49,6 +58,21 @@ const STATUS_CONFIG = {
     returned: { label: "Returned", color: C.success, bg: C.successFaded },
     overdue: { label: "Overdue", color: C.danger, bg: C.dangerFaded },
 };
+const CLOTH_TYPES = Object.entries(CLOTH_CONFIG).map(([id, c]) => ({
+    value: id,
+    label: c.label,
+}));
+const SIZE_SCALES = {
+    letter: ["XS", "S", "M", "L", "XL", "XXL"],
+    number: ["28", "30", "32", "34", "36", "38"],
+};
+
+const COLORS = [
+    "White", "Black", "Blue", "Gold", "Red",
+    "Dark Blue", "Gray", "Light Gray", "Chocolate", "Dark Red", "Dark Green",
+    "Green", "Tan", "Pink",
+];
+const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
 const COLOR_DOT = {
     White: "#FFFFFF",
@@ -56,7 +80,16 @@ const COLOR_DOT = {
     Blue: "#3B82F6",
     Gold: "#F59E0B",
     Red: "#EF4444",
+    "Dark Blue": "#1E3A8A",
+    Gray: "#6B7280",
+    Chocolate: "#7B3F00",
+    "Dark Red": "#991B1B",
+    "Dark Green": "#166534",
+    Green: "#22C55E",
+    Tan: "#D2B48C",
+    Pink: "#EC4899",
 };
+
 
 // ─── Reusable pieces ──────────────────────────────────────────────────────────
 function SectionCard({ children, style }) {
@@ -121,6 +154,29 @@ export default function BookingDetailsScreen({ navigation, route }) {
     const [returnState, setReturnState] = useState([]);
     const [partialSheetVisible, setPartialSheetVisible] = useState(false);
     const [draftReturn, setDraftReturn] = useState([]);
+
+    //returnDate update states
+    // ── Return date edit state ────────────────────────────────────────────────
+    const [datesEditMode, setDatesEditMode] = useState(false);
+    const [draftReturnDate, setDraftReturnDate] = useState(new Date());
+    const [datePickerOpen, setDatePickerOpen] = useState(false);
+    const [datesError, setDatesError] = useState("");
+    const [datesSaving, setDatesSaving] = useState(false);
+
+    //payment states
+    // ── Notes edit state ──────────────────────────────────────────────────────
+    const [notesEditMode, setNotesEditMode] = useState(false);
+    const [draftNotes, setDraftNotes] = useState("");
+    const [notesError, setNotesError] = useState("");
+
+    //photos states
+    // ── Photos edit state ─────────────────────────────────────────────────────
+    const [photosEditMode, setPhotosEditMode] = useState(false);
+    const [draftExistingPhotos, setDraftExistingPhotos] = useState([]); // [{ id, uri, removed }]
+    const [newPhotoUris, setNewPhotoUris] = useState([]);
+    const [photosSaving, setPhotosSaving] = useState(false);
+    const [photosError, setPhotosError] = useState("");
+    const { renderImageRow, SourceModal } = useImagePicker(newPhotoUris, setNewPhotoUris);
 
     // ── Payment edit state ────────────────────────────────────────────────────
     const [paymentEditMode, setPaymentEditMode] = useState(false);
@@ -299,6 +355,109 @@ export default function BookingDetailsScreen({ navigation, route }) {
             Alert.alert("Couldn't update", err.message);
         }
     }, [draftReturn, bookingId, loadBooking]);
+    // ----notes ---------------------------
+    const openNotesEdit = useCallback(() => {
+        setDraftNotes(booking?.notes || "");
+        setNotesError("");
+        setNotesEditMode(true);
+    }, [booking]);
+
+    const cancelNotesEdit = useCallback(() => {
+        setNotesEditMode(false);
+        setNotesError("");
+    }, []);
+
+    const saveNotes = useCallback(async () => {
+        try {
+            await updateBookingNotes(bookingId, draftNotes);
+            setNotesEditMode(false);
+            setNotesError("");
+            await loadBooking();
+        } catch (err) {
+            setNotesError(err.message);
+        }
+    }, [draftNotes, bookingId, loadBooking]);
+
+    //---photos --------------
+    const openPhotosEdit = useCallback(() => {
+        setDraftExistingPhotos(booking.photos.map((p) => ({ ...p, removed: false })));
+        setNewPhotoUris([]);
+        setPhotosError("");
+        setPhotosEditMode(true);
+    }, [booking]);
+
+    const cancelPhotosEdit = useCallback(() => {
+        setPhotosEditMode(false);
+        setNewPhotoUris([]);
+        setPhotosError("");
+    }, []);
+
+    const toggleRemoveExistingPhoto = useCallback((id) => {
+        setDraftExistingPhotos((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, removed: !p.removed } : p))
+        );
+    }, []);
+
+    const savePhotos = useCallback(async () => {
+        const removeIds = draftExistingPhotos.filter((p) => p.removed).map((p) => p.id);
+        setPhotosSaving(true);
+        try {
+            await updateBookingPhotos(bookingId, { addUris: newPhotoUris, removeIds });
+            setPhotosEditMode(false);
+            setNewPhotoUris([]);
+            setPhotosError("");
+            await loadBooking();
+        } catch (err) {
+            setPhotosError(err.message);
+        } finally {
+            setPhotosSaving(false);
+        }
+    }, [draftExistingPhotos, newPhotoUris, bookingId, loadBooking]);
+
+    //returndate edit --------------------------------
+    const openDatesEdit = useCallback(() => {
+        if (!booking) return;
+        setDraftReturnDate(new Date(booking.returnDate));
+        setDatesError("");
+        setDatesEditMode(true);
+    }, [booking]);
+
+    const cancelDatesEdit = useCallback(() => {
+        setDatesEditMode(false);
+        setDatePickerOpen(false);
+        setDatesError("");
+    }, []);
+
+    // Date-only ISO (YYYY-MM-DD) in local time, matching the schema convention
+    // — never toISOString() here, since that's UTC and can land on the wrong
+    // calendar day for a Rwanda device (see handoff doc §5).
+    const toLocalISODate = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const d = String(date.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+    };
+
+    const saveDates = useCallback(async () => {
+        setDatesSaving(true);
+        try {
+            await updateBookingReturnDate(bookingId, toLocalISODate(draftReturnDate));
+            setDatesEditMode(false);
+            setDatesError("");
+            await loadBooking();
+        } catch (err) {
+            setDatesError(err.message);
+        } finally {
+            setDatesSaving(false);
+        }
+    }, [draftReturnDate, bookingId, loadBooking]);
+
+    const formatDatePicker = (date) => {
+        const d = String(date.getDate()).padStart(2, "0");
+        const m = String(date.getMonth() + 1).padStart(2, "0");
+        const y = date.getFullYear();
+        return `${d}/${m}/${y}`;
+    };
 
     // ── Payment ────────────────────────────────────────────────────────────────
     const openPaymentEdit = useCallback(() => {
@@ -432,13 +591,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                     >
                         <Ionicons name="share-outline" size={21} color={C.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={headerStyles.iconBtn}
-                        onPress={() => navigation?.navigate("New Booking", { bookingId })}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="create-outline" size={21} color={C.primary} />
-                    </TouchableOpacity>
+
                     <TouchableOpacity
                         style={headerStyles.iconBtn}
                         onPress={() => setMenuVisible(true)}
@@ -496,16 +649,6 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                 >
                     <View style={detailStyles.menuSheet}>
 
-                        <TouchableOpacity
-                            style={detailStyles.menuItem}
-                            onPress={() => { setMenuVisible(false); navigation?.navigate("NewBooking", { bookingId }); }}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons name="create-outline" size={19} color={C.primary} />
-                            <Text style={[detailStyles.menuItemText, { color: C.primary }]}>Edit Booking</Text>
-                        </TouchableOpacity>
-
-                        <View style={detailStyles.menuDivider} />
 
                         <TouchableOpacity
                             style={detailStyles.menuItem}
@@ -713,6 +856,21 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                     setViewerVisible(false)
                 }
             />
+            {/* dates picker */}
+            {datePickerOpen && (
+                <DateTimePicker
+                    value={draftReturnDate}
+                    mode="date"
+                    display="default"
+                    minimumDate={new Date(booking.bookingDate)}
+                    onChange={(event, selectedDate) => {
+                        setDatePickerOpen(false);
+                        if (event.type === "dismissed" || !selectedDate) return;
+                        setDraftReturnDate(selectedDate);
+                        setDatesError("");
+                    }}
+                />
+            )}
 
             {/* ── Scroll content ── */}
             <ScrollView
@@ -763,7 +921,20 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
 
                 {/* ── Booked Items ── */}
                 <SectionCard>
-                    <SectionHeader icon="" title="Bookings" badge={returnState.length} />
+                    {/* Header row with edit pencil */}
+                    <View style={detailStyles.sectionHeaderRow}>
+
+                        <Text style={[detailStyles.sectionTitle, { flex: 1 }]}>Bookings</Text>
+                        {!paymentEditMode && !booking.fullyPaid && (
+                            <TouchableOpacity
+                                style={detailStyles.paymentEditIcon}
+
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="create-outline" size={18} color={C.primary} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
 
                     {returnState.map((item, ci) => {
                         const rStatus = getReturnStatus(item);
@@ -835,113 +1006,311 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                     })}
                 </SectionCard>
                 {/* ── Notes ── */}
-                {booking.notes && (
-                    <SectionCard>
-                        <SectionHeader icon="" title="Notes" />
+                <SectionCard>
+                    <View style={detailStyles.sectionHeaderRow}>
+                        <Text style={[detailStyles.sectionTitle, { flex: 1 }]}>Notes</Text>
+                        {!notesEditMode && (
+                            <TouchableOpacity
+                                style={detailStyles.paymentEditIcon}
+                                onPress={openNotesEdit}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="create-outline" size={18} color={C.primary} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {notesEditMode ? (
+                        <>
+                            <TextInput
+                                style={[detailStyles.paymentInput, { minHeight: 90, textAlignVertical: "top", fontWeight: "400", fontSize: 14 }]}
+                                value={draftNotes}
+                                onChangeText={(v) => { setDraftNotes(v); setNotesError(""); }}
+                                placeholder="Add a note..."
+                                placeholderTextColor={C.textMuted}
+                                multiline
+                                cursorColor={C.primary}
+                            />
+
+                            {notesError !== "" && (
+                                <View style={detailStyles.paymentErrorRow}>
+                                    <Ionicons name="alert-circle-outline" size={15} color={C.danger} />
+                                    <Text style={detailStyles.paymentErrorText}>{notesError}</Text>
+                                </View>
+                            )}
+
+                            <View style={detailStyles.paymentEditActions}>
+                                <TouchableOpacity
+                                    style={detailStyles.paymentCancelBtn}
+                                    onPress={cancelNotesEdit}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={detailStyles.paymentCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={detailStyles.paymentSaveBtn}
+                                    onPress={saveNotes}
+                                    activeOpacity={0.8}
+                                >
+                                    <Ionicons name="checkmark" size={16} color="#fff" />
+                                    <Text style={detailStyles.paymentSaveText}>Save</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </>
+                    ) : booking.notes ? (
                         <Text style={detailStyles.notesText}>{booking.notes}</Text>
-                    </SectionCard>
-                )}
+                    ) : (
+                        <TouchableOpacity onPress={openNotesEdit} activeOpacity={0.6}>
+                            <Text style={detailStyles.notesEmptyText}>No notes yet — tap to add one.</Text>
+                        </TouchableOpacity>
+                    )}
+                </SectionCard>
 
                 {/* ── Photos ── */}
-                {booking.photos.length > 0 && (
-                    <SectionCard>
-                        <SectionHeader icon="" title="Photos" badge={booking.photos.length} />
+                <SectionCard>
+                    <View style={detailStyles.sectionHeaderRow}>
+                        <Text style={[detailStyles.sectionTitle, { flex: 1 }]}>Photos</Text>
+                        {!photosEditMode && (
+                            <TouchableOpacity
+                                style={detailStyles.paymentEditIcon}
+                                onPress={openPhotosEdit}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="create-outline" size={18} color={C.primary} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {photosEditMode ? (
+                        <>
+                            <SourceModal />
+
+                            {draftExistingPhotos.length > 0 && (
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={detailStyles.photoScroll}
+                                >
+                                    {draftExistingPhotos.map((photo) => (
+                                        <View key={photo.id} style={detailStyles.photoWrapper}>
+                                            <Image
+                                                source={{ uri: photo.uri }}
+                                                style={[detailStyles.photo, photo.removed && detailStyles.photoRemoved]}
+                                                resizeMode="cover"
+                                            />
+                                            <TouchableOpacity
+                                                style={[detailStyles.photoRemoveBtn, photo.removed && detailStyles.photoRemoveBtnActive]}
+                                                onPress={() => toggleRemoveExistingPhoto(photo.id)}
+                                                activeOpacity={0.8}
+                                            >
+                                                <Ionicons name={photo.removed ? "refresh" : "close"} size={13} color="#fff" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            )}
+
+                            {renderImageRow()}
+
+                            {photosError !== "" && (
+                                <View style={detailStyles.paymentErrorRow}>
+                                    <Ionicons name="alert-circle-outline" size={15} color={C.danger} />
+                                    <Text style={detailStyles.paymentErrorText}>{photosError}</Text>
+                                </View>
+                            )}
+
+                            <View style={detailStyles.paymentEditActions}>
+                                <TouchableOpacity
+                                    style={detailStyles.paymentCancelBtn}
+                                    onPress={cancelPhotosEdit}
+                                    activeOpacity={0.7}
+                                    disabled={photosSaving}
+                                >
+                                    <Text style={detailStyles.paymentCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={detailStyles.paymentSaveBtn}
+                                    onPress={savePhotos}
+                                    activeOpacity={0.8}
+                                    disabled={photosSaving}
+                                >
+                                    {photosSaving ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="checkmark" size={16} color="#fff" />
+                                            <Text style={detailStyles.paymentSaveText}>Save</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </>
+                    ) : booking.photos.length > 0 ? (
                         <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={detailStyles.photoScroll}
                         >
-                            {booking.photos.map((uri, i) => (
-                                <TouchableOpacity key={i} activeOpacity={0.85} style={detailStyles.photoWrapper} onPress={() => openViewer(booking.photos, i)}>
-                                    <Image source={{ uri }} style={detailStyles.photo} resizeMode="cover" />
+                            {booking.photos.map((photo, i) => (
+                                <TouchableOpacity
+                                    key={photo.id}
+                                    activeOpacity={0.85}
+                                    style={detailStyles.photoWrapper}
+                                    onPress={() => openViewer(booking.photos.map((p) => p.uri), i)}
+                                >
+                                    <Image source={{ uri: photo.uri }} style={detailStyles.photo} resizeMode="cover" />
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
-                    </SectionCard>
-                )}
+                    ) : (
+                        <TouchableOpacity onPress={openPhotosEdit} activeOpacity={0.6}>
+                            <Text style={detailStyles.notesEmptyText}>No photos yet — tap to add some.</Text>
+                        </TouchableOpacity>
+                    )}
+                </SectionCard>
 
                 {/* ── Dates ── */}
                 <SectionCard>
-                    <SectionHeader icon="" title="Dates" />
-
-                    <View style={detailStyles.datesGrid}>
-                        <View style={detailStyles.dateBlock}>
-                            <Text style={detailStyles.dateBlockLabel}>Booking Date</Text>
-                            <Text style={detailStyles.dateBlockValue}>{booking.bookingDateFormatted}</Text>
-                        </View>
-                        <View style={detailStyles.dateArrowWrap}>
-                            <Ionicons name="arrow-forward" size={16} color={C.textMuted} />
-                        </View>
-                        <View style={[detailStyles.dateBlock, { alignItems: "flex-end" }]}>
-                            <Text style={detailStyles.dateBlockLabel}>Return Date</Text>
-                            <Text style={detailStyles.dateBlockValue}>{booking.returnDateFormatted}</Text>
-                        </View>
+                    <View style={detailStyles.sectionHeaderRow}>
+                        <Text style={[detailStyles.sectionTitle, { flex: 1 }]}>Dates</Text>
+                        {!datesEditMode && (
+                            <TouchableOpacity
+                                style={detailStyles.paymentEditIcon}
+                                onPress={openDatesEdit}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="create-outline" size={18} color={C.primary} />
+                            </TouchableOpacity>
+                        )}
                     </View>
 
-                    {/* Days remaining pill */}
-                    {!allReturned && (
-                        <View
-                            style={[
-                                detailStyles.daysPill,
-                                daysInfo.type === "ok" && { backgroundColor: C.primaryFaded, borderColor: C.primaryLight },
-                                daysInfo.type === "warning" && { backgroundColor: C.warningFaded, borderColor: "#FDE68A" },
-                                daysInfo.type === "overdue" && { backgroundColor: C.dangerFaded, borderColor: "#FECACA" },
-                            ]}
-                        >
-                            <Ionicons
-                                name={
-                                    daysInfo.type === "ok" ? "time-outline" :
-                                        daysInfo.type === "warning" ? "alert-circle-outline" :
-                                            "warning-outline"
-                                }
-                                size={15}
-                                color={
-                                    daysInfo.type === "ok" ? C.primary :
-                                        daysInfo.type === "warning" ? C.warning :
-                                            C.danger
-                                }
-                            />
-                            <Text
-                                style={[
-                                    detailStyles.daysPillText,
-                                    daysInfo.type === "ok" && { color: C.primary },
-                                    daysInfo.type === "warning" && { color: C.warning },
-                                    daysInfo.type === "overdue" && { color: C.danger },
-                                ]}
-                            >
-                                {daysInfo.label}
-                            </Text>
-                        </View>
-                    )}
+                    {datesEditMode ? (
+                        <>
+                            <View style={detailStyles.datesGrid}>
+                                <View style={detailStyles.dateBlock}>
+                                    <Text style={detailStyles.dateBlockLabel}>Booking Date</Text>
+                                    <Text style={detailStyles.dateBlockValue}>{booking.bookingDateFormatted}</Text>
+                                </View>
+                                <View style={detailStyles.dateArrowWrap}>
+                                    <Ionicons name="arrow-forward" size={16} color={C.textMuted} />
+                                </View>
+                                <View style={{ flex: 1, gap: 4 }}>
+                                    <Text style={detailStyles.dateBlockLabel}>Return Date</Text>
+                                    <TouchableOpacity
+                                        style={detailStyles.dateEditBtn}
+                                        onPress={() => setDatePickerOpen(true)}
+                                        activeOpacity={0.75}
+                                    >
+                                        <Ionicons name="calendar" size={16} color={C.primary} />
+                                        <Text style={detailStyles.dateEditBtnText}>{formatDatePicker(draftReturnDate)}</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
 
-                    {/* Return confirmation row */}
-                    {allReturned ? (
-                        // All returned — show green confirmation banner
-                        <View style={detailStyles.allReturnedBanner}>
-                            <Ionicons name="checkmark-circle" size={20} color={C.success} />
-                            <Text style={detailStyles.allReturnedText}>Imyenda yose yarataruwe</Text>
-                        </View>
+                            {datesError !== "" && (
+                                <View style={detailStyles.paymentErrorRow}>
+                                    <Ionicons name="alert-circle-outline" size={15} color={C.danger} />
+                                    <Text style={detailStyles.paymentErrorText}>{datesError}</Text>
+                                </View>
+                            )}
+
+                            <View style={detailStyles.paymentEditActions}>
+                                <TouchableOpacity
+                                    style={detailStyles.paymentCancelBtn}
+                                    onPress={cancelDatesEdit}
+                                    activeOpacity={0.7}
+                                    disabled={datesSaving}
+                                >
+                                    <Text style={detailStyles.paymentCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={detailStyles.paymentSaveBtn}
+                                    onPress={saveDates}
+                                    activeOpacity={0.8}
+                                    disabled={datesSaving}
+                                >
+                                    {datesSaving ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="checkmark" size={16} color="#fff" />
+                                            <Text style={detailStyles.paymentSaveText}>Save</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </>
                     ) : (
-                        // Return action buttons
-                        <View style={detailStyles.returnBtnsRow}>
-                            <TouchableOpacity
-                                style={detailStyles.allReturnBtn}
-                                onPress={handleAllReturned}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="checkmark-done-outline" size={16} color={C.primary} />
-                                <Text style={detailStyles.allReturnBtnText}>Yose yataruwe</Text>
-                            </TouchableOpacity>
+                        <>
+                            <View style={detailStyles.datesGrid}>
+                                <View style={detailStyles.dateBlock}>
+                                    <Text style={detailStyles.dateBlockLabel}>Booking Date</Text>
+                                    <Text style={detailStyles.dateBlockValue}>{booking.bookingDateFormatted}</Text>
+                                </View>
+                                <View style={detailStyles.dateArrowWrap}>
+                                    <Ionicons name="arrow-forward" size={16} color={C.textMuted} />
+                                </View>
+                                <View style={[detailStyles.dateBlock, { alignItems: "flex-end" }]}>
+                                    <Text style={detailStyles.dateBlockLabel}>Return Date</Text>
+                                    <Text style={detailStyles.dateBlockValue}>{booking.returnDateFormatted}</Text>
+                                </View>
+                            </View>
 
-                            <TouchableOpacity
-                                style={detailStyles.someReturnBtn}
-                                onPress={openPartialSheet}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="list-outline" size={16} color={C.textSecondary} />
-                                <Text style={detailStyles.someReturnBtnText}>Imyenda yataruwe</Text>
-                            </TouchableOpacity>
-                        </View>
+                            {/* Days remaining pill */}
+                            {!allReturned && (
+                                <View
+                                    style={[
+                                        detailStyles.daysPill,
+                                        daysInfo.type === "ok" && { backgroundColor: C.primaryFaded, borderColor: C.primaryLight },
+                                        daysInfo.type === "warning" && { backgroundColor: C.warningFaded, borderColor: "#FDE68A" },
+                                        daysInfo.type === "overdue" && { backgroundColor: C.dangerFaded, borderColor: "#FECACA" },
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name={
+                                            daysInfo.type === "ok" ? "time-outline" :
+                                                daysInfo.type === "warning" ? "alert-circle-outline" :
+                                                    "warning-outline"
+                                        }
+                                        size={15}
+                                        color={
+                                            daysInfo.type === "ok" ? C.primary :
+                                                daysInfo.type === "warning" ? C.warning :
+                                                    C.danger
+                                        }
+                                    />
+                                    <Text
+                                        style={[
+                                            detailStyles.daysPillText,
+                                            daysInfo.type === "ok" && { color: C.primary },
+                                            daysInfo.type === "warning" && { color: C.warning },
+                                            daysInfo.type === "overdue" && { color: C.danger },
+                                        ]}
+                                    >
+                                        {daysInfo.label}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Return confirmation row */}
+                            {allReturned ? (
+                                <View style={detailStyles.allReturnedBanner}>
+                                    <Ionicons name="checkmark-circle" size={20} color={C.success} />
+                                    <Text style={detailStyles.allReturnedText}>Imyenda yose yarataruwe</Text>
+                                </View>
+                            ) : (
+                                <View style={detailStyles.returnBtnsRow}>
+                                    <TouchableOpacity style={detailStyles.allReturnBtn} onPress={handleAllReturned} activeOpacity={0.8}>
+                                        <Ionicons name="checkmark-done-outline" size={16} color={C.primary} />
+                                        <Text style={detailStyles.allReturnBtnText}>Yose yataruwe</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={detailStyles.someReturnBtn} onPress={openPartialSheet} activeOpacity={0.8}>
+                                        <Ionicons name="list-outline" size={16} color={C.textSecondary} />
+                                        <Text style={detailStyles.someReturnBtnText}>Imyenda yataruwe</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </>
                     )}
                 </SectionCard>
 
@@ -1388,6 +1757,23 @@ const detailStyles = StyleSheet.create({
         width: 100,
         height: 100,
         borderRadius: 12,
+    },
+    photoRemoved: {
+        opacity: 0.35,
+    },
+    photoRemoveBtn: {
+        position: "absolute",
+        top: 5,
+        right: 5,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: "rgba(0,0,0,0.55)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    photoRemoveBtnActive: {
+        backgroundColor: C.danger,
     },
 
     // Dates
