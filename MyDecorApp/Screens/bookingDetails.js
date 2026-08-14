@@ -434,7 +434,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={headerStyles.iconBtn}
-                        onPress={() => navigation?.navigate("NewBooking", { bookingId })}
+                        onPress={() => navigation?.navigate("New Booking", { bookingId })}
                         activeOpacity={0.7}
                     >
                         <Ionicons name="create-outline" size={21} color={C.primary} />

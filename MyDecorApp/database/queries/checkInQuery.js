@@ -23,7 +23,7 @@ import {
 // the last CHECK_IN_COOLDOWN_DAYS is excluded entirely, regardless of
 // which trigger(s) would otherwise apply.
 export async function getCheckInItems() {
-  const db = getDb();
+  const db = await GetDBConnection();
 
   const todayStr = toLocalDateString(new Date());
   const cooldownBoundary = daysAgoDateString(CHECK_IN_COOLDOWN_DAYS);
@@ -33,7 +33,7 @@ export async function getCheckInItems() {
     `SELECT
        b.id, b.status, b.booking_date, b.return_date,
        b.total_amount, b.amount_paid, b.last_checked_in_at,
-       c.name AS client_name, c.phone AS client_phone
+       c.names AS client_name, c.phone AS client_phone
      FROM bookings b
      JOIN clients c ON c.id = b.client_id
      WHERE b.deleted_at IS NULL

@@ -15,8 +15,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import ImageViewing from "react-native-image-viewing";
-
+import { useCheckIn } from "../hooks/useCheckIn";
+import SingleCheckInCard from "../components/singleCheckInCard"
 import { getBookingsList } from "../database/queries/bookingsQuery";
+import CheckInSheet from "../components/checkInSheet";
 
 
 const C = {
@@ -69,6 +71,30 @@ export default function BookingsScreen() {
 
 
   /*
+   * Fetches bookings and updates state. Reusable — called both from the
+   * focus effect below AND from the check-in handlers further down,
+   * since resolving something inside the check-in sheet (e.g. marking a
+   * booking returned) needs THIS list's card to reflect the new status
+   * too, not just the check-in sheet's own local state.
+   */
+  const loadBookings = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await getBookingsList();
+      setBookings(data);
+
+      console.log("[BookingsScreen] Bookings loaded:", data);
+    } catch (err) {
+      console.error("[BookingsScreen] Failed to load bookings:", err);
+      setError(err.message || "Failed to load bookings.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /*
    * Reload bookings every time the screen receives focus.
    *
    * This means:
@@ -83,52 +109,40 @@ export default function BookingsScreen() {
    */
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-
-      const loadBookings = async () => {
-        try {
-          setLoading(true);
-          setError(null);
-
-          const data = await getBookingsList();
-
-          if (!cancelled) {
-            setBookings(data);
-
-            console.log(
-              "[BookingsScreen] Bookings loaded:",
-              data
-            );
-          }
-
-        } catch (err) {
-          console.error(
-            "[BookingsScreen] Failed to load bookings:",
-            err
-          );
-
-          if (!cancelled) {
-            setError(
-              err.message ||
-              "Failed to load bookings."
-            );
-          }
-
-        } finally {
-          if (!cancelled) {
-            setLoading(false);
-          }
-        }
-      };
-
-
       loadBookings();
+    }, [loadBookings])
+  );
 
+  /*
+   * Check-in: useCheckIn() owns its own focus effect (loads qualifying
+   * bookings, stamps last_checked_in_at the instant they're shown) and
+   * exposes resolveReturn/resolvePayment, which call the same mutations
+   * BookingDetailsScreen uses. This screen's job is just to render
+   * whatever comes back, and to also refresh ITS OWN list after a
+   * resolution — a booking marked returned/paid from inside the check-in
+   * needs its card here updated too, not just removed from the sheet.
+   */
+  const {
+    items: checkInItems,
+    dismiss: dismissCheckIn,
+    resolveReturn,
+    resolvePayment,
+  } = useCheckIn();
 
-      return () => {
-        cancelled = true;
-      };
-    }, [])
+  const handleCheckInReturn = useCallback(
+    async (bookingId, clothesState) => {
+      await resolveReturn(bookingId, clothesState);
+      loadBookings();
+    },
+    [resolveReturn, loadBookings]
+  );
+
+  const handleCheckInPayment = useCallback(
+    async (bookingId, payment) => {
+      await resolvePayment(bookingId, payment);
+      loadBookings();
+    },
+    [resolvePayment, loadBookings]
   );
 
 
@@ -500,6 +514,28 @@ export default function BookingsScreen() {
           color="white"
         />
       </TouchableOpacity>
+
+      {/*
+       * Check-in overlay. Mutually exclusive with itself: exactly one of
+       * these can ever render, since both conditions read off the same
+       * checkInItems.length. 1 qualifying booking -> simple deep-link
+       * card. 2+ -> full expandable-sections sheet.
+       */}
+      {checkInItems.length === 1 && (
+        <SingleCheckInCard
+          item={checkInItems[0]}
+          onDismiss={dismissCheckIn}
+        />
+      )}
+
+      {checkInItems.length > 1 && (
+        <CheckInSheet
+          items={checkInItems}
+          onDismiss={dismissCheckIn}
+          onResolveReturn={handleCheckInReturn}
+          onResolvePayment={handleCheckInPayment}
+        />
+      )}
 
     </SafeAreaView>
   );

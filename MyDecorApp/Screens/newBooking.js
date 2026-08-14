@@ -1246,7 +1246,8 @@ export  default  function NewBookingScreen() {
 
     // Dates
     const [bookingDate, setBookingDate] = useState(new Date());
-    const [returnDate, setReturnDate] = useState(new Date());
+    const [returnDate, setReturnDate] = useState(new Date(Date.now() + 86400000));
+    console.log("===========returnDate",returnDate);
     const [activePicker, setActivePicker] = useState(null);
     // Format: 29/07/2026
     const formatDate = (date) => {
