@@ -1233,6 +1233,7 @@ export  default  function NewBookingScreen() {
     // Items
     const [items, setItems] = useState([]);
     const [selectedClothTypes, setSelectedClothTypes] = useState([]);
+    const [notes,setNotes]=useState(null);
 
     const {
         toggleClothType,
@@ -1286,6 +1287,7 @@ export  default  function NewBookingScreen() {
 
                 bookingDate: bookingDate,
                 returnDate: returnDate,
+                notes:notes,
 
                 totalAmount: totalAmount,
                 amountPaid: amountPaid,
@@ -1470,8 +1472,24 @@ export  default  function NewBookingScreen() {
 
                     </View>
                 </SectionCard>
+                  {/* ── Section 5: Notes ── */}
+                <SectionCard>
+                    <SectionHeader icon="" title="Notes" />
 
-                {/* ── Section 4: Payment ── */}
+                    <View style={styles.inputWrapper}>
+                        <TextInput
+                            style={[styles.textInput,{maxHeight:400,minHeight:50}]}
+                            value={notes}
+                            onChangeText={setNotes}
+                            keyboardType="default"
+                            placeholderTextColor={C.textMuted}
+                            placeholder="notes..."
+                            multiline
+                            
+                        />
+                    </View>
+                </SectionCard>
+
                 <SectionCard>
                     <SectionHeader icon="" title="Payment" />
 
@@ -1509,6 +1527,8 @@ export  default  function NewBookingScreen() {
                         </Text>
                     </View>
                 </SectionCard>
+
+                
 
                 {/* ── Save Button ── */}
                 {isSaving ? (

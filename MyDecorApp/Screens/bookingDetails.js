@@ -744,17 +744,17 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                                 <Ionicons name="call-outline" size={14} color={C.textSecondary} />
                                 <Text style={detailStyles.clientPhone}>{booking.clientPhone}</Text>
                             </View>
-                            {!booking.clientAddress  ? (
+                            {!booking.clientAddress ? (
                                 <View style={detailStyles.typePill}>
                                     <Text style={detailStyles.typePillText}>{booking.clientType}</Text>
                                 </View>
                             ) : (
-                                <View style={{flexDirection: "row", alignItems: "center"}}>
+                                <View style={{ flexDirection: "row", alignItems: "center" }}>
                                     <View style={detailStyles.typePill}>
-                                    <Text style={detailStyles.typePillText}>{booking.clientType}</Text>
-                                </View>
-                                <Text style={{alignSelf: "center"}}>-</Text>
-                                <Text style={detailStyles.clientPhone}> {booking.clientAddress}</Text>
+                                        <Text style={detailStyles.typePillText}>{booking.clientType}</Text>
+                                    </View>
+                                    <Text style={{ alignSelf: "center" }}>-</Text>
+                                    <Text style={detailStyles.clientPhone}> {booking.clientAddress}</Text>
                                 </View>
                             )}
                         </TouchableOpacity>
@@ -834,6 +834,13 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                         );
                     })}
                 </SectionCard>
+                {/* ── Notes ── */}
+                {booking.notes && (
+                    <SectionCard>
+                        <SectionHeader icon="" title="Notes" />
+                        <Text style={detailStyles.notesText}>{booking.notes}</Text>
+                    </SectionCard>
+                )}
 
                 {/* ── Photos ── */}
                 {booking.photos.length > 0 && (
@@ -1434,6 +1441,11 @@ const detailStyles = StyleSheet.create({
         fontSize: 15,
         fontWeight: "600",
         color: C.text,
+    },
+    notesText: {
+        fontSize: 14,
+        color: C.text,
+        lineHeight: 20,
     },
     paymentTotal: {
         fontSize: 16,

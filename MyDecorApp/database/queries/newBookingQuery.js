@@ -117,6 +117,7 @@ function validateAndFormatBookingData(data) {
     bookingDate,
     returnDate,
     totalAmount,
+    notes,
     amountPaid,
   } = data;
 
@@ -301,6 +302,7 @@ function validateAndFormatBookingData(data) {
       return_date: formatDateForDB(returnDate),
       total_amount: total,
       amount_paid: paid,
+      notes: normalizeText(notes) || null,
     },
 
     clothes,
@@ -417,7 +419,7 @@ export async function createBooking(bookingData) {
           deleted_at,
           synced_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, NULL);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL);
         `,
         [
           data.booking.id,
@@ -427,6 +429,7 @@ export async function createBooking(bookingData) {
           data.booking.return_date,
           data.booking.total_amount,
           data.booking.amount_paid,
+          data.booking.notes,
           timestamp,
           timestamp,
         ]
