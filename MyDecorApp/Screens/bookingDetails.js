@@ -32,6 +32,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { updateBookingReturnDate } from "../database/queries/updateBookingReturnDate";
 import { updateBookingClothes } from "../database/queries/updateBookingClothes";
 import Share from "react-native-share";
+import * as FileSystem from "expo-file-system/legacy";
+import { deleteBooking } from "../database/queries/deleteBookingQuery";
 
 // ─── Design Tokens (same as NewBookingScreen) ─────────────────────────────────
 const C = {
@@ -722,15 +724,31 @@ export default function BookingDetailsScreen({ navigation, route }) {
 
         const message = parts.join("\n");
 
-        // react-native-share wants file:// URIs prefixed for local files on
-        // Android; our stored local_uri values already come from expo-file-system
-        // as file:// paths (see fileHandler.js), so no transformation needed.
-        const urls = booking.photos
-            .filter((p) => selectedPhotoIds.includes(p.id))
-            .map((p) => p.uri);
+        // Selected photos live in the app's private documentDirectory
+        // (booking-images/), which react-native-share's Android FileProvider
+        // does NOT have whitelisted — Android blocks handing a file:// URI from
+        // private storage to another app outright. Copying each selected photo
+        // into cacheDirectory first puts it somewhere the provider does trust,
+        // producing a URI the receiving app can actually open. These are
+        // throwaway copies — nothing reads them again after the share sheet closes.
+        const selectedPhotos = booking.photos.filter((p) => selectedPhotoIds.includes(p.id));
+        const urls = [];
+        try {
+            for (const photo of selectedPhotos) {
+                const extension = (photo.uri.split(".").pop() || "jpg").split("?")[0];
+                const dest = `${FileSystem.cacheDirectory}share-${Date.now()}-${photo.id}.${extension}`;
+                await FileSystem.copyAsync({ from: photo.uri, to: dest });
+                urls.push(dest);
+            }
+        } catch (copyErr) {
+            console.log("[BookingDetailsScreen] failed to stage photos for sharing:", copyErr);
+            Alert.alert("Couldn't prepare photos", "Sharing will continue with text only.");
+        }
 
         setSharing(true);
         try {
+            console.log("[share] message:", message);
+            console.log("[share] urls:", urls);
             await Share.open({
                 title: "Share Booking",
                 message,
@@ -748,7 +766,7 @@ export default function BookingDetailsScreen({ navigation, route }) {
     }, [booking, shareSections, selectedPhotoIds]);
 
 
-    
+
 
     // ── Delete ───────────────────────────────────────────────────────────────────
     const handleDelete = useCallback(() => {
@@ -756,11 +774,12 @@ export default function BookingDetailsScreen({ navigation, route }) {
         setTimeout(() => setDeleteVisible(true), 300);
     }, []);
 
-    const confirmDelete = useCallback(() => {
+    const confirmDelete = useCallback(async() => {
         // NOTE: this still only navigates back — it does not delete
         // anything from the DB. A real deleteBooking() mutation (soft
         // delete via the deleted_at column already in the schema) is still
         // outstanding; this rewrite only wired reads + returns + payment.
+        await deleteBooking(bookingId);
         setDeleteVisible(false);
         navigation?.goBack();
     }, [navigation]);
@@ -807,7 +826,7 @@ export default function BookingDetailsScreen({ navigation, route }) {
             headerShadowVisible: false,
             headerStyle: { backgroundColor: C.bg },
         });
-    }, [booking,openShareSheet, navigation, bookingId]);
+    }, [booking, openShareSheet, navigation, bookingId]);
 
     // ── Loading / error states ──────────────────────────────────────────────────
     if (loading) {
@@ -968,7 +987,7 @@ export default function BookingDetailsScreen({ navigation, route }) {
 
                         <TouchableOpacity
                             style={detailStyles.menuItem}
-                            onPress={() => { setMenuVisible(false); openShareSheet; }}
+                            onPress={() => { setMenuVisible(false); openShareSheet(); }}
                             activeOpacity={0.7}
                         >
                             <Ionicons name="share-outline" size={19} color={C.text} />
