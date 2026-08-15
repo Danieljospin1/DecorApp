@@ -9,7 +9,6 @@ import {
     Image,
     Platform,
     Modal,
-    Share,
     Alert,
     TextInput,
     Linking,
@@ -32,6 +31,7 @@ import { updateBookingPhotos } from "../database/queries/updateBookingPhotos";
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { updateBookingReturnDate } from "../database/queries/updateBookingReturnDate";
 import { updateBookingClothes } from "../database/queries/updateBookingClothes";
+import Share from "react-native-share";
 
 // ─── Design Tokens (same as NewBookingScreen) ─────────────────────────────────
 const C = {
@@ -670,41 +670,85 @@ export default function BookingDetailsScreen({ navigation, route }) {
     }, [draftTotal, draftPaid, bookingId, loadBooking]);
 
     // ── Share ────────────────────────────────────────────────────────────────────
-    const handleShare = useCallback(async () => {
+
+    const [shareSheetVisible, setShareSheetVisible] = useState(false);
+    const [shareSections, setShareSections] = useState({
+        client: true,
+        items: true,
+        dates: true,
+        payment: true,
+    });
+    const [selectedPhotoIds, setSelectedPhotoIds] = useState([]);
+    const [sharing, setSharing] = useState(false);
+
+    const openShareSheet = useCallback(() => {
+        if (!booking) return;
+        setShareSections({ client: true, items: true, dates: true, payment: true });
+        setSelectedPhotoIds([]);
+        setShareSheetVisible(true);
+    }, [booking]);
+
+    const toggleShareSection = useCallback((key) => {
+        setShareSections((prev) => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+
+    const toggleSharePhoto = useCallback((id) => {
+        setSelectedPhotoIds((prev) =>
+            prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
+        );
+    }, []);
+
+    const confirmShare = useCallback(async () => {
         if (!booking) return;
 
-        const clothSummary = booking.clothes.map((c) => {
-            const units = c.units.map((u) =>
-                [u.color, u.size].filter(Boolean).join("/")
-            ).join(", ");
-            return units
-                ? `${c.label} x${c.quantity} (${units})`
-                : `${c.label} x${c.quantity}`;
-        }).join("\n  ");
+        const parts = [`MyDecor Booking - ${booking.displayCode}`];
 
-        const message =
-            `MyDecor Booking - ${booking.displayCode}
-
-Client: ${booking.clientName}
-Phone:  ${booking.clientPhone}
-Type:   ${booking.clientType}
-
-Items:
-  ${clothSummary}
-
-Booking Date: ${booking.bookingDateFormatted}
-Return Date:  ${booking.returnDateFormatted}
-
-Total:     ${booking.totalAmountFormatted} RWF
-Paid:      ${booking.amountPaidFormatted} RWF
-Remaining: ${booking.remainingAmountFormatted} RWF`;
-
-        try {
-            await Share.share({ message });
-        } catch (e) {
-            console.log(e);
+        if (shareSections.client) {
+            parts.push(`\nClient: ${booking.clientName}\nPhone:  ${booking.clientPhone}\nType:   ${booking.clientType}`);
         }
-    }, [booking]);
+        if (shareSections.items) {
+            const clothSummary = booking.clothes.map((c) => {
+                const units = c.units.map((u) => [u.color, u.size].filter(Boolean).join("/")).join(", ");
+                return units ? `${c.label} x${c.quantity} (${units})` : `${c.label} x${c.quantity}`;
+            }).join("\n  ");
+            parts.push(`\nItems:\n  ${clothSummary}`);
+        }
+        if (shareSections.dates) {
+            parts.push(`\nBooking Date: ${booking.bookingDateFormatted}\nReturn Date:  ${booking.returnDateFormatted}`);
+        }
+        if (shareSections.payment) {
+            parts.push(`\nTotal:     ${booking.totalAmountFormatted} RWF\nPaid:      ${booking.amountPaidFormatted} RWF\nRemaining: ${booking.remainingAmountFormatted} RWF`);
+        }
+
+        const message = parts.join("\n");
+
+        // react-native-share wants file:// URIs prefixed for local files on
+        // Android; our stored local_uri values already come from expo-file-system
+        // as file:// paths (see fileHandler.js), so no transformation needed.
+        const urls = booking.photos
+            .filter((p) => selectedPhotoIds.includes(p.id))
+            .map((p) => p.uri);
+
+        setSharing(true);
+        try {
+            await Share.open({
+                title: "Share Booking",
+                message,
+                urls: urls.length > 0 ? urls : undefined,
+                failOnCancel: false, // user backing out of the share sheet isn't an error
+            });
+            setShareSheetVisible(false);
+        } catch (e) {
+            // failOnCancel:false already swallows plain cancellation, so
+            // anything landing here is a real failure worth knowing about.
+            console.log("[BookingDetailsScreen] share failed:", e);
+        } finally {
+            setSharing(false);
+        }
+    }, [booking, shareSections, selectedPhotoIds]);
+
+
+    
 
     // ── Delete ───────────────────────────────────────────────────────────────────
     const handleDelete = useCallback(() => {
@@ -744,7 +788,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                 <View style={headerStyles.actionsRow}>
                     <TouchableOpacity
                         style={headerStyles.iconBtn}
-                        onPress={handleShare}
+                        onPress={openShareSheet}
                         activeOpacity={0.7}
                     >
                         <Ionicons name="share-outline" size={21} color={C.text} />
@@ -763,7 +807,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
             headerShadowVisible: false,
             headerStyle: { backgroundColor: C.bg },
         });
-    }, [booking, handleShare, navigation, bookingId]);
+    }, [booking,openShareSheet, navigation, bookingId]);
 
     // ── Loading / error states ──────────────────────────────────────────────────
     if (loading) {
@@ -793,6 +837,120 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
         <View style={{ flex: 1, backgroundColor: C.bg }}>
             <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
+            {/* share modal */}
+
+            {/* ── Share options sheet ── */}
+            <Modal
+                visible={shareSheetVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShareSheetVisible(false)}
+            >
+                <View style={detailStyles.sheetBackdrop}>
+                    <TouchableOpacity
+                        style={{ flex: 1 }}
+                        activeOpacity={1}
+                        onPress={() => setShareSheetVisible(false)}
+                    />
+                    <View style={detailStyles.returnSheet}>
+                        <View style={detailStyles.sheetHandle} />
+                        <View style={detailStyles.returnSheetHeader}>
+                            <Text style={detailStyles.returnSheetTitle}>Share Booking</Text>
+                            <TouchableOpacity
+                                onPress={() => setShareSheetVisible(false)}
+                                style={detailStyles.returnSheetClose}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="close" size={20} color={C.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingBottom: 8 }}>
+                            {/* ── Section toggles ── */}
+                            <View style={{ gap: 10 }}>
+                                <Text style={detailStyles.shareGroupLabel}>Include in text</Text>
+                                {[
+                                    { key: "client", label: "Client info" },
+                                    { key: "items", label: "Booked items" },
+                                    { key: "dates", label: "Dates" },
+                                    { key: "payment", label: "Payment" },
+                                ].map((s) => (
+                                    <TouchableOpacity
+                                        key={s.key}
+                                        style={detailStyles.shareToggleRow}
+                                        onPress={() => toggleShareSection(s.key)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={[detailStyles.checkbox, shareSections[s.key] && detailStyles.checkboxChecked]}>
+                                            {shareSections[s.key] && <Ionicons name="checkmark" size={13} color="#fff" />}
+                                        </View>
+                                        <Text style={detailStyles.shareToggleText}>{s.label}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            {/* ── Photo picker (multi-select) ── */}
+                            {booking.photos.length > 0 && (
+                                <View style={{ gap: 10 }}>
+                                    <View style={detailStyles.sharePhotosHeaderRow}>
+                                        <Text style={detailStyles.shareGroupLabel}>Photos</Text>
+                                        {selectedPhotoIds.length > 0 && (
+                                            <Text style={detailStyles.sharePhotosCount}>
+                                                {selectedPhotoIds.length} selected
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={{ gap: 10 }}
+                                    >
+                                        {booking.photos.map((photo) => {
+                                            const selected = selectedPhotoIds.includes(photo.id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={photo.id}
+                                                    onPress={() => toggleSharePhoto(photo.id)}
+                                                    activeOpacity={0.8}
+                                                    style={detailStyles.photoWrapper}
+                                                >
+                                                    <Image
+                                                        source={{ uri: photo.uri }}
+                                                        style={[detailStyles.photo, selected && detailStyles.sharePhotoSelected]}
+                                                        resizeMode="cover"
+                                                    />
+                                                    {selected && (
+                                                        <View style={detailStyles.sharePhotoCheckOverlay}>
+                                                            <Ionicons name="checkmark-circle" size={22} color={C.primary} />
+                                                        </View>
+                                                    )}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </ScrollView>
+                                </View>
+                            )}
+                        </ScrollView>
+
+                        <TouchableOpacity
+                            style={detailStyles.returnConfirmBtn}
+                            onPress={confirmShare}
+                            activeOpacity={0.85}
+                            disabled={sharing}
+                        >
+                            {sharing ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="share-outline" size={19} color="#fff" />
+                                    <Text style={detailStyles.returnConfirmText}>Share</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
             {/* ── 3-dots dropdown menu ── */}
             <Modal
                 visible={menuVisible}
@@ -810,7 +968,7 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
 
                         <TouchableOpacity
                             style={detailStyles.menuItem}
-                            onPress={() => { setMenuVisible(false); handleShare(); }}
+                            onPress={() => { setMenuVisible(false); openShareSheet; }}
                             activeOpacity={0.7}
                         >
                             <Ionicons name="share-outline" size={19} color={C.text} />
@@ -1751,6 +1909,43 @@ const headerStyles = StyleSheet.create({
         alignItems: "center",
         gap: 10,
         maxWidth: 200,
+    },
+    shareGroupLabel: {
+        fontSize: 13,
+        fontWeight: "700",
+        color: C.textMuted,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+    },
+    sharePhotosHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    sharePhotosCount: {
+        fontSize: 12,
+        fontWeight: "700",
+        color: C.primary,
+    },
+    shareToggleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+    shareToggleText: {
+        fontSize: 14,
+        fontWeight: "500",
+        color: C.text,
+    },
+    sharePhotoSelected: {
+        opacity: 0.55,
+    },
+    sharePhotoCheckOverlay: {
+        position: "absolute",
+        top: 6,
+        right: 6,
+        backgroundColor: "#fff",
+        borderRadius: 11,
     },
     avatar: {
         width: 38,

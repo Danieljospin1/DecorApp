@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/AppLogo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.jospin123.MyDecor"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,7 +30,12 @@
       "expo-sqlite",
       "expo-font",
       "expo-asset",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-share",
+        {}
+      ],
+      "expo-build-properties"
     ]
   }
 }
