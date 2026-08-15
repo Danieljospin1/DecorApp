@@ -31,6 +31,7 @@ import { useImagePicker } from "./newBooking";
 import { updateBookingPhotos } from "../database/queries/updateBookingPhotos";
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { updateBookingReturnDate } from "../database/queries/updateBookingReturnDate";
+import { updateBookingClothes } from "../database/queries/updateBookingClothes";
 
 // ─── Design Tokens (same as NewBookingScreen) ─────────────────────────────────
 const C = {
@@ -155,6 +156,11 @@ export default function BookingDetailsScreen({ navigation, route }) {
     const [partialSheetVisible, setPartialSheetVisible] = useState(false);
     const [draftReturn, setDraftReturn] = useState([]);
 
+    // ── Booked Items edit state ───────────────────────────────────────────────
+    const [clothesEditMode, setClothesEditMode] = useState(false);
+    const [clothesSaving, setClothesSaving] = useState(false);
+    const clothEditor = useClothEditor();
+
     //returnDate update states
     // ── Return date edit state ────────────────────────────────────────────────
     const [datesEditMode, setDatesEditMode] = useState(false);
@@ -198,6 +204,121 @@ export default function BookingDetailsScreen({ navigation, route }) {
             }))
         );
     }, []);
+    // ─── Cloth editor for an EXISTING booking (returned-aware) ─────────────────
+    // Unlike useClothSelector (creation-only, no concept of "returned"), this
+    // hook enforces: a returned unit can never be removed, quantity can never
+    // drop below returnedCount, and removing a whole cloth type is blocked
+    // while anything on it has returned. Color/size stay editable regardless
+    // of returned status — that's an explicit product decision, not an oversight.
+    function useClothEditor() {
+        const [items, setItems] = useState([]);
+        const [removedIds, setRemovedIds] = useState([]);
+        const [error, setError] = useState("");
+
+        const makeUnit = (config) => ({
+            ...(config.hasColor && { color: "White" }),
+            ...(config.hasSize && { size: SIZE_SCALES[config.sizeType][0] }),
+        });
+
+        // Called when edit mode opens — seeds from whatever getBookingDetails()
+        // actually returned, not from creation defaults.
+        const resetItems = useCallback((initialClothes) => {
+            setItems(
+                initialClothes.map((c) => ({
+                    id: c.id,
+                    clothId: c.clothId,
+                    label: c.label,
+                    quantity: c.quantity,
+                    returnedCount: c.returnedCount,
+                    units: c.units.map((u) => ({ ...u })),
+                    isNew: false,
+                }))
+            );
+            setRemovedIds([]);
+            setError("");
+        }, []);
+
+        const toggleClothType = useCallback((clothId) => {
+            setError("");
+            setItems((prev) => {
+                const existing = prev.find((it) => it.clothId === clothId);
+
+                if (existing) {
+                    if (existing.returnedCount > 0) {
+                        setError(`Can't remove "${existing.label}" — some units already returned.`);
+                        return prev;
+                    }
+                    if (!existing.isNew) {
+                        setRemovedIds((ids) => [...ids, existing.id]);
+                    }
+                    return prev.filter((it) => it.clothId !== clothId);
+                }
+
+                const config = CLOTH_CONFIG[clothId];
+                const needsUnits = config.hasColor || config.hasSize;
+                return [
+                    ...prev,
+                    {
+                        id: null,
+                        clothId,
+                        label: config.label,
+                        quantity: 1,
+                        returnedCount: 0,
+                        units: needsUnits ? [makeUnit(config)] : [],
+                        isNew: true,
+                    },
+                ];
+            });
+        }, []);
+
+        const changeQuantity = useCallback((clothId, delta) => {
+            setError("");
+            setItems((prev) => prev.map((it) => {
+                if (it.clothId !== clothId) return it;
+
+                const config = CLOTH_CONFIG[it.clothId];
+                const needsUnits = config.hasColor || config.hasSize;
+                const floor = Math.max(1, it.returnedCount);
+
+                if (delta < 0 && it.quantity <= floor) {
+                    if (it.returnedCount > 0) {
+                        setError(`Can't reduce "${it.label}" below ${floor} — some units already returned.`);
+                    }
+                    return it;
+                }
+
+                const newQty = it.quantity + delta;
+
+                if (!needsUnits) {
+                    return { ...it, quantity: newQty };
+                }
+
+                let units = [...it.units];
+                if (delta > 0) {
+                    units.push(makeUnit(config));
+                } else {
+                    // Remove the last NON-returned unit, wherever it sits in
+                    // the array — a returned unit is never eligible.
+                    const fromEnd = [...units].reverse().findIndex((u) => !u.returned);
+                    if (fromEnd !== -1) {
+                        units.splice(units.length - 1 - fromEnd, 1);
+                    }
+                }
+
+                return { ...it, quantity: newQty, units };
+            }));
+        }, []);
+
+        const updateUnit = useCallback((clothId, unitIndex, key, value) => {
+            setItems((prev) => prev.map((it) => {
+                if (it.clothId !== clothId) return it;
+                const units = it.units.map((u, i) => (i === unitIndex ? { ...u, [key]: value } : u));
+                return { ...it, units };
+            }));
+        }, []);
+
+        return { items, removedIds, error, setError, resetItems, toggleClothType, changeQuantity, updateUnit };
+    }
 
     // Reusable for both the initial/focus load AND refreshing after a
     // mutation — after any write, we refetch the canonical formatted state
@@ -344,6 +465,43 @@ export default function BookingDetailsScreen({ navigation, route }) {
             })
         );
     }, []);
+
+
+    const openClothesEdit = useCallback(() => {
+        if (!booking) return;
+        clothEditor.resetItems(booking.clothes);
+        setClothesEditMode(true);
+    }, [booking, clothEditor]);
+
+    const cancelClothesEdit = useCallback(() => {
+        setClothesEditMode(false);
+        clothEditor.setError("");
+    }, [clothEditor]);
+
+    const saveClothes = useCallback(async () => {
+        if (clothEditor.items.length === 0) {
+            clothEditor.setError("A booking must have at least one item.");
+            return;
+        }
+        setClothesSaving(true);
+        try {
+            await updateBookingClothes(bookingId, {
+                updated: clothEditor.items
+                    .filter((it) => !it.isNew)
+                    .map((it) => ({ id: it.id, label: it.label, quantity: it.quantity, units: it.units, returnedCount: it.returnedCount })),
+                added: clothEditor.items
+                    .filter((it) => it.isNew)
+                    .map((it) => ({ clothId: it.clothId, label: it.label, quantity: it.quantity, units: it.units })),
+                removedIds: clothEditor.removedIds,
+            });
+            setClothesEditMode(false);
+            await loadBooking();
+        } catch (err) {
+            clothEditor.setError(err.message);
+        } finally {
+            setClothesSaving(false);
+        }
+    }, [clothEditor, bookingId, loadBooking]);
 
     // Commit draft to the DB, then reload — same reasoning as handleAllReturned
     const confirmPartial = useCallback(async () => {
@@ -921,14 +1079,12 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
 
                 {/* ── Booked Items ── */}
                 <SectionCard>
-                    {/* Header row with edit pencil */}
                     <View style={detailStyles.sectionHeaderRow}>
-
                         <Text style={[detailStyles.sectionTitle, { flex: 1 }]}>Bookings</Text>
-                        {!paymentEditMode && !booking.fullyPaid && (
+                        {!clothesEditMode && (
                             <TouchableOpacity
                                 style={detailStyles.paymentEditIcon}
-
+                                onPress={openClothesEdit}
                                 activeOpacity={0.7}
                             >
                                 <Ionicons name="create-outline" size={18} color={C.primary} />
@@ -936,74 +1092,159 @@ Remaining: ${booking.remainingAmountFormatted} RWF`;
                         )}
                     </View>
 
-                    {returnState.map((item, ci) => {
-                        const rStatus = getReturnStatus(item);
+                    {clothesEditMode ? (
+                        <>
+                            <Dropdown
+                                selectedClothTypes={clothEditor.items.map((it) => ({ id: it.clothId }))}
+                                onToggle={clothEditor.toggleClothType}
+                            />
 
-                        // Icon beside quantity badge
-                        const returnIcon =
-                            rStatus === "all" ? { name: "checkmark-circle", color: C.success } :
-                                rStatus === "partial" ? { name: "time", color: C.warning } :
-                                    { name: "time-outline", color: C.textMuted };
+                            {clothEditor.items.length === 0 && (
+                                <Text style={detailStyles.notesEmptyText}>No items — pick a cloth type above.</Text>
+                            )}
 
-                        return (
-                            <View
-                                key={item.id}
-                                style={[
-                                    detailStyles.clothRow,
-                                    ci < returnState.length - 1 && detailStyles.clothRowBorder,
-                                ]}
-                            >
-                                {/* Top row: label + status icon + qty badge */}
-                                <View style={detailStyles.clothTopRow}>
-                                    <Text style={detailStyles.clothLabel}>{item.label}</Text>
+                            {clothEditor.items.map((item) => {
+                                const config = CLOTH_CONFIG[item.clothId];
+                                const needsUnits = config.hasColor || config.hasSize;
+                                const sizeOptions = config.hasSize ? SIZE_SCALES[config.sizeType] : [];
+                                const floor = Math.max(1, item.returnedCount);
 
-                                    <View style={detailStyles.clothTopRight}>
-                                        <Ionicons
-                                            name={returnIcon.name}
-                                            size={18}
-                                            color={returnIcon.color}
-                                        />
-                                        <View style={detailStyles.qtyBadge}>
-                                            <Text style={detailStyles.qtyBadgeText}>x{item.quantity}</Text>
-                                        </View>
-                                    </View>
-                                </View>
-
-                                {/* Per-unit chips */}
-                                {item.units.length > 0 && (
-                                    <View style={detailStyles.unitsWrap}>
-                                        {item.units.map((unit, ui) => (
-                                            <View
-                                                key={ui}
-                                                style={[
-                                                    detailStyles.unitChip,
-                                                    unit.returned && detailStyles.unitChipReturned,
-                                                ]}
+                                return (
+                                    <View key={item.clothId} style={detailStyles.clothEditCard}>
+                                        <View style={detailStyles.clothEditHeaderRow}>
+                                            <Text style={detailStyles.clothLabel}>{item.label}</Text>
+                                            <TouchableOpacity
+                                                onPress={() => clothEditor.toggleClothType(item.clothId)}
+                                                style={detailStyles.clothRemoveBtn}
+                                                activeOpacity={0.7}
                                             >
-                                                {unit.color && <ColorDot color={unit.color} />}
-                                                <Text style={[
-                                                    detailStyles.unitChipText,
-                                                    unit.returned && { color: C.success },
-                                                ]}>
-                                                    {[unit.color, unit.size].filter(Boolean).join(" · ")}
-                                                </Text>
-                                                {unit.returned && (
-                                                    <Ionicons name="checkmark-circle" size={13} color={C.success} />
+                                                <Ionicons name="trash-outline" size={16} color={C.danger} />
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {item.returnedCount > 0 && (
+                                            <Text style={detailStyles.clothReturnedNote}>
+                                                {item.returnedCount} of {item.quantity} already returned — can't remove or go below {floor}.
+                                            </Text>
+                                        )}
+
+                                        <View style={detailStyles.clothQtyRow}>
+                                            <Text style={detailStyles.inputLabel}>Quantity</Text>
+                                            <View style={detailStyles.quantityRow}>
+                                                <TouchableOpacity
+                                                    style={[detailStyles.qtyBtn, item.quantity <= floor && detailStyles.qtyBtnDisabled]}
+                                                    onPress={() => clothEditor.changeQuantity(item.clothId, -1)}
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <Text style={detailStyles.qtyBtnText}>−</Text>
+                                                </TouchableOpacity>
+                                                <Text style={detailStyles.qtyValue}>{item.quantity}</Text>
+                                                <TouchableOpacity
+                                                    style={detailStyles.qtyBtn}
+                                                    onPress={() => clothEditor.changeQuantity(item.clothId, +1)}
+                                                    activeOpacity={0.7}
+                                                >
+                                                    <Text style={detailStyles.qtyBtnText}>+</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+
+                                        {needsUnits && item.units.map((unit, ui) => (
+                                            <View key={ui} style={detailStyles.clothUnitBlock}>
+                                                <View style={detailStyles.clothUnitHeaderRow}>
+                                                    <Text style={detailStyles.clothUnitLabel}>
+                                                        {item.quantity > 1 ? `Unit ${ui + 1}` : "Details"}
+                                                    </Text>
+                                                    {unit.returned && (
+                                                        <View style={detailStyles.returnedBadge}>
+                                                            <Text style={detailStyles.returnedBadgeText}>Returned</Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+
+                                                {config.hasColor && (
+                                                    <ChipGroup
+                                                        options={COLORS}
+                                                        selected={unit.color}
+                                                        onSelect={(v) => clothEditor.updateUnit(item.clothId, ui, "color", v)}
+                                                        colorMode
+                                                    />
+                                                )}
+                                                {config.hasSize && (
+                                                    <ChipGroup
+                                                        options={sizeOptions}
+                                                        selected={unit.size}
+                                                        onSelect={(v) => clothEditor.updateUnit(item.clothId, ui, "size", v)}
+                                                    />
                                                 )}
                                             </View>
                                         ))}
                                     </View>
-                                )}
+                                );
+                            })}
 
-                                {/* Anonymous units (no color/size) — show returned count */}
-                                {item.units.length === 0 && item.returnedCount > 0 && (
-                                    <Text style={detailStyles.returnedCountText}>
-                                        {item.returnedCount} of {item.quantity} returned
-                                    </Text>
-                                )}
+                            {clothEditor.error !== "" && (
+                                <View style={detailStyles.paymentErrorRow}>
+                                    <Ionicons name="alert-circle-outline" size={15} color={C.danger} />
+                                    <Text style={detailStyles.paymentErrorText}>{clothEditor.error}</Text>
+                                </View>
+                            )}
+
+                            <View style={detailStyles.paymentEditActions}>
+                                <TouchableOpacity style={detailStyles.paymentCancelBtn} onPress={cancelClothesEdit} activeOpacity={0.7} disabled={clothesSaving}>
+                                    <Text style={detailStyles.paymentCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={detailStyles.paymentSaveBtn} onPress={saveClothes} activeOpacity={0.8} disabled={clothesSaving}>
+                                    {clothesSaving ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="checkmark" size={16} color="#fff" />
+                                            <Text style={detailStyles.paymentSaveText}>Save</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
                             </View>
-                        );
-                    })}
+                        </>
+                    ) : (
+                        // ── existing read-mode block, unchanged ──
+                        returnState.map((item, ci) => {
+                            const rStatus = getReturnStatus(item);
+                            const returnIcon =
+                                rStatus === "all" ? { name: "checkmark-circle", color: C.success } :
+                                    rStatus === "partial" ? { name: "time", color: C.warning } :
+                                        { name: "time-outline", color: C.textMuted };
+                            return (
+                                <View key={item.id} style={[detailStyles.clothRow, ci < returnState.length - 1 && detailStyles.clothRowBorder]}>
+                                    <View style={detailStyles.clothTopRow}>
+                                        <Text style={detailStyles.clothLabel}>{item.label}</Text>
+                                        <View style={detailStyles.clothTopRight}>
+                                            <Ionicons name={returnIcon.name} size={18} color={returnIcon.color} />
+                                            <View style={detailStyles.qtyBadge}>
+                                                <Text style={detailStyles.qtyBadgeText}>x{item.quantity}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                    {item.units.length > 0 && (
+                                        <View style={detailStyles.unitsWrap}>
+                                            {item.units.map((unit, ui) => (
+                                                <View key={ui} style={[detailStyles.unitChip, unit.returned && detailStyles.unitChipReturned]}>
+                                                    {unit.color && <ColorDot color={unit.color} />}
+                                                    <Text style={[detailStyles.unitChipText, unit.returned && { color: C.success }]}>
+                                                        {[unit.color, unit.size].filter(Boolean).join(" · ")}
+                                                    </Text>
+                                                    {unit.returned && <Ionicons name="checkmark-circle" size={13} color={C.success} />}
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                    {item.units.length === 0 && item.returnedCount > 0 && (
+                                        <Text style={detailStyles.returnedCountText}>{item.returnedCount} of {item.quantity} returned</Text>
+                                    )}
+                                </View>
+                            );
+                        })
+                    )}
                 </SectionCard>
                 {/* ── Notes ── */}
                 <SectionCard>
@@ -1691,6 +1932,86 @@ const detailStyles = StyleSheet.create({
     clothRow: {
         gap: 8,
         paddingVertical: 10,
+    },
+    clothEditCard: {
+        backgroundColor: C.bg,
+        borderRadius: 14,
+        padding: 14,
+        gap: 10,
+        borderWidth: 1,
+        borderColor: C.border,
+    },
+    clothEditHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    clothRemoveBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        backgroundColor: C.dangerFaded,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    clothReturnedNote: {
+        fontSize: 12,
+        color: C.warning,
+        fontStyle: "italic",
+    },
+    clothQtyRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    quantityRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        borderWidth: 1.5,
+        borderColor: C.border,
+        borderRadius: 12,
+        overflow: "hidden",
+    },
+    qtyBtn: {
+        width: 38,
+        height: 38,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: C.card,
+    },
+    qtyBtnDisabled: {
+        opacity: 0.35,
+    },
+    qtyBtnText: {
+        fontSize: 18,
+        color: C.primary,
+        fontWeight: "600",
+    },
+    qtyValue: {
+        width: 38,
+        textAlign: "center",
+        fontSize: 15,
+        fontWeight: "700",
+        color: C.text,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderColor: C.border,
+    },
+    clothUnitBlock: {
+        gap: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: C.border,
+    },
+    clothUnitHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    clothUnitLabel: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: C.textSecondary,
     },
     clothRowBorder: {
         borderBottomWidth: 1,
