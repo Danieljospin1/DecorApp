@@ -5,7 +5,7 @@ import BookingsScreen from './Screens/bookings';
 import BookingsStack from './components/stackNav';
 import { NavigationContainer } from "@react-navigation/native";
 
-import {MotiProvider} from 'moti'
+
 
 export default function App() {
   return (
