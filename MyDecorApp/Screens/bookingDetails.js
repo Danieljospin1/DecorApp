@@ -67,13 +67,13 @@ const CLOTH_TYPES = Object.entries(CLOTH_CONFIG).map(([id, c]) => ({
 }));
 const SIZE_SCALES = {
     letter: ["XS", "S", "M", "L", "XL", "XXL"],
-    number: ["28", "30", "32", "34", "36", "38"],
+    number: ["28", "30", "32", "34", "36", "38","40", "42", "44", "46", "48", "50","52", "54", "56", "58", "60"],
 };
 
 const COLORS = [
-    "White", "Black", "Blue", "Gold", "Red",
-    "Dark Blue", "Gray", "Light Gray", "Chocolate", "Dark Red", "Dark Green",
-    "Green", "Tan", "Pink",
+    "White", "Black", "Blue","Dark Blue","violet", "Gold", "Red","Dark Red",
+     "Gray", "Light Gray", "Chocolate",  "Dark Green",
+    "Green", "Tan", "Pink","yellow","orange","purple","brown","beige","maroon","navy","teal","olive","silver","lime","aqua"
 ];
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
@@ -1950,6 +1950,7 @@ const headerStyles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
+        backgroundColor: C.bg,
     },
     shareToggleText: {
         fontSize: 14,

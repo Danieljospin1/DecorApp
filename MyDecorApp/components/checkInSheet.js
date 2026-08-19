@@ -47,7 +47,7 @@ export default function CheckInSheet({ items, onDismiss, onResolveReturn, onReso
                 <View style={styles.sheet}>
                     <View style={styles.handle} />
                     <View style={styles.header}>
-                        <Text style={styles.headerTitle}>Daily Check-in</Text>
+                        <Text style={styles.headerTitle}>Isuzuma rya buri munsi</Text>
                         <TouchableOpacity onPress={onDismiss} style={styles.closeBtn} activeOpacity={0.7}>
                             <Ionicons name="close" size={20} color={C.textSecondary} />
                         </TouchableOpacity>
@@ -209,7 +209,7 @@ function CheckInItemCard({ item, onResolveReturn, onResolvePayment }) {
                         activeOpacity={0.7}
                     >
                         <Ionicons name="shirt-outline" size={16} color={C.textSecondary} />
-                        <Text style={styles.sectionToggleText}>{item.daysInfo.label} · items not back</Text>
+                        <Text style={styles.sectionToggleText}>{item.daysInfo.label} · Hari ibitarataruwe</Text>
                         <Ionicons name={returnExpanded ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
                     </TouchableOpacity>
 

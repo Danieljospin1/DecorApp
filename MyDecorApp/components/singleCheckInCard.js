@@ -26,8 +26,8 @@ export default function SingleCheckInCard({ item, onDismiss }) {
     if (!item) return null;
 
     const reasons = [];
-    if (item.returnQualifies) reasons.push(`${item.daysInfo.label} · items not back`);
-    if (item.paymentQualifies) reasons.push(`${item.remainingAmountFormatted} RWF still due`);
+    if (item.returnQualifies) reasons.push(`${item.daysInfo.label} · Hari ibitarataruwe`);
+    if (item.paymentQualifies) reasons.push(`Aracyakurimo ${item.remainingAmountFormatted} RWF`);
 
     return (
         <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
@@ -37,7 +37,7 @@ export default function SingleCheckInCard({ item, onDismiss }) {
                         <Ionicons name="alert-circle-outline" size={26} color={C.primary} />
                     </View>
 
-                    <Text style={styles.title}>Check in on {item.clientName}?</Text>
+                    <Text style={styles.title}>Suzuma ibijyanye na booking ya {item.clientName}</Text>
 
                     <View style={styles.reasonsBlock}>
                         {reasons.map((r, i) => (

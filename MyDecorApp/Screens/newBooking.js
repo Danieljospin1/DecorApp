@@ -44,12 +44,16 @@ export const CLOTH_CONFIG = {
     malene: { label: "Ikanzu ya Malene", hasColor: false, hasSize: false, sizeType: null },
     suit: { label: "Costume (ikoti n' ipantaro)", hasColor: true, hasSize: false, sizeType: null },
     ikoti: { label: "Ikoti", hasColor: true, hasSize: true, sizeType: "number" },
+    ikotiCroase: { label: "Ikoti croase", hasColor: true, hasSize: true, sizeType: "number" },
+    ipantaro: { label: "Ipantaro", hasColor: true, hasSize: true, sizeType: "number" },
     ishati: { label: "Ishati", hasColor: true, hasSize: true, sizeType: "letter" },
-    umukenyero: { label: "Umukenyero", hasColor: false, hasSize: false, sizeType: null },
+    umukenyero: { label: "Umukenyero usanzwe", hasColor: false, hasSize: false, sizeType: null },
+    umukenyeroVIP: { label: "Umukenyero VIP", hasColor: false, hasSize: false, sizeType: null },
     bridesUmukenyero: { label: "Umukenyero(umugeni)", hasColor: false, hasSize: false, hasType: null },
     groomsUmukenyero: { label: "Umukenyero(umukwe)", hasColor: false, hasSize: false, hasType: null },
     boysUmukenyero: { label: "Umukenyero(abasore)", hasColor: false, hasSize: false, hasType: null },
     childrenUmukenyero: { label: "Umukenyero(abana)", hasColor: false, hasSize: false, hasType: null },
+    lobe:{label:"Lobe de nuit",hasColor:true,hasSize:false,hasType:null},
     top: { label: "Top", hasColor: true, hasSize: false, hasType: null },
     tie: { label: "Cravat", hasColor: false, hasSize: false, hasType: null },
     noeud: { label: "Noeud (🎀)", hasColor: false, hasSize: false, hasType: null },
@@ -58,7 +62,7 @@ export const CLOTH_CONFIG = {
     inkongoro: { label: "Inkongoro", hasColor: false, hasSize: false, hasType: null },
     inigi: { label: "Inigi", hasColor: false, hasSize: false, hasType: null },
     sakame: { label: "Sakame", hasColor: false, hasSize: false, hasType: null },
-    ururabo: { label: "Ururabo", hasColor: false, hasSize: false, hasType: null },
+    ururaboArtificiel: { label: "Ururabo Artificiel", hasColor: false, hasSize: false, hasType: null },
     masaye: { label: "Masaye", hasColor: false, hasSize: false, hasType: null },
     inkoni: { label: "Inkoni", hasColor: false, hasSize: false, hasType: null },
 };
@@ -68,13 +72,13 @@ const CLOTH_TYPES = Object.entries(CLOTH_CONFIG).map(([id, c]) => ({
 }));
 const SIZE_SCALES = {
     letter: ["XS", "S", "M", "L", "XL", "XXL"],
-    number: ["28", "30", "32", "34", "36", "38"],
+    number: ["28", "30", "32", "34", "36", "38","40", "42", "44", "46", "48", "50","52", "54", "56", "58", "60"],
 };
 
 const COLORS = [
-    "White", "Black", "Blue", "Gold", "Red",
-    "Dark Blue", "Gray", "Light Gray", "Chocolate", "Dark Red", "Dark Green",
-    "Green", "Tan", "Pink",
+    "White", "Black", "Blue","Dark Blue","violet", "Gold", "Red","Dark Red",
+     "Gray", "Light Gray", "Chocolate",  "Dark Green",
+    "Green", "Tan", "Pink","yellow","orange","purple","brown","beige","maroon","navy","teal","olive","silver","lime","aqua"
 ];
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
@@ -1494,7 +1498,7 @@ export default function NewBookingScreen() {
                     <SectionHeader icon="" title="Payment" />
 
                     <View style={styles.inputWrapper}>
-                        <Text style={styles.inputLabel}>Total Amount (RWF)</Text>
+                        <Text style={styles.inputLabel}>Agomba kwishyurwa yose hamwe (RWF)</Text>
                         <TextInput
                             style={styles.textInput}
                             value={totalAmount}
@@ -1506,7 +1510,7 @@ export default function NewBookingScreen() {
                     </View>
 
                     <View style={styles.inputWrapper}>
-                        <Text style={styles.inputLabel}>Amount Paid (RWF)</Text>
+                        <Text style={styles.inputLabel}>Ayishyuwe ubu (RWF)</Text>
                         <TextInput
                             style={styles.textInput}
                             value={amountPaid}
@@ -1519,7 +1523,7 @@ export default function NewBookingScreen() {
 
                     <View style={styles.remainingCard}>
                         <View style={styles.remainingLeft}>
-                            <Text style={styles.remainingLabel}>Remaining Balance</Text>
+                            <Text style={styles.remainingLabel}>Asigaye kwishyurwa</Text>
                             <Text style={styles.remainingNote}>Auto-calculated</Text>
                         </View>
                         <Text style={styles.remainingAmount}>
