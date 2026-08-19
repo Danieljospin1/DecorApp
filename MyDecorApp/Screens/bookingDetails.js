@@ -85,12 +85,26 @@ const COLOR_DOT = {
     Red: "#EF4444",
     "Dark Blue": "#1E3A8A",
     Gray: "#6B7280",
+    "Light Gray":"#D1D5DB",
     Chocolate: "#7B3F00",
     "Dark Red": "#991B1B",
     "Dark Green": "#166534",
     Green: "#22C55E",
     Tan: "#D2B48C",
     Pink: "#EC4899",
+    yellow: "#FACC15",
+    violet: "#8B5CF6",
+    orange:"#FFA500",
+    purple:"#800080",
+    brown:"#A52A2A",
+    beige:"#F5F5DC",
+    maroon:"#800000",
+    navy:"#000080",
+    teal:"#008080",
+    olive:"#808000",
+    silver:"#C0C0C0",
+    lime:"#00FF00",
+    aqua:"#00FFFF",
 };
 
 
@@ -649,15 +663,15 @@ export default function BookingDetailsScreen({ navigation, route }) {
         // that's not redundant, it's the actual source of truth in case
         // anything changed between load and save.
         if (newTotal <= 0) {
-            setPaymentError("Total amount must be greater than 0.");
+            setPaymentError("Amafaranga agomba kwishyurwa agomba kuba ari hejuru ya 0.");
             return;
         }
         if (newPaid < 0) {
-            setPaymentError("Amount paid cannot be negative.");
+            setPaymentError("Amafaranga yishyuwe agomba kuba ari hejuru ya 0.");
             return;
         }
         if (newPaid > newTotal) {
-            setPaymentError("Amount paid cannot exceed total amount.");
+            setPaymentError("Amafaranga yishyuwe ntagomba gusumba agomba kwishyurwa.");
             return;
         }
 
